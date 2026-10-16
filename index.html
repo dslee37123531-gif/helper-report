@@ -1,0 +1,2922 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 파일 내용이 밖으로 나가지 않도록, 이 페이지가 인터넷으로 데이터를 보내는 통로(fetch/XHR 등)를 막아 둡니다.
+     엑셀 읽기 도구(SheetJS)를 내려받는 것만 cdn.sheetjs.com 에서 허용합니다. -->
+<meta http-equiv="Content-Security-Policy" content="default-src https://cdn.sheetjs.com 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src https://generativelanguage.googleapis.com; form-action 'none'; img-src data: blob:">
+<title>설문결과보고서 도우미</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --card:#ffffff; --ink:#1d2433; --muted:#5b6578; --line:#d6dce6;
+    --brand:#1f5fbf; --brand-dark:#174a96; --brand-soft:#e8f0fc;
+    --warn-bg:#fff4e0; --warn-ink:#7a4a00; --err-bg:#fdeaea; --err-ink:#8f1d1d;
+    --ok-bg:#e8f6ee; --ok-ink:#1b5e3a; --priv-bg:#fdf0f0;
+  }
+  *{box-sizing:border-box}
+  html{font-size:16px}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font-family:"Malgun Gothic","맑은 고딕","Apple SD Gothic Neo","Noto Sans KR",sans-serif;line-height:1.6}
+  .wrap{max-width:1100px;margin:0 auto;padding:24px 16px 64px}
+  h1{font-size:1.7rem;margin:0 0 4px}
+  .lead{margin:0 0 20px;color:var(--muted)}
+  section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:18px}
+  h2{font-size:1.15rem;margin:0 0 12px;display:flex;align-items:center;gap:10px}
+  .num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;
+       background:var(--brand);color:#fff;font-size:.95rem;font-weight:700;flex:none}
+  .hint{color:var(--muted);font-size:.93rem;margin:6px 0 0}
+
+  /* 파일 올리는 곳 */
+  #drop{border:2px dashed #8aa4cf;background:var(--brand-soft);border-radius:12px;padding:34px 16px;text-align:center;
+        cursor:pointer;transition:background .15s,border-color .15s}
+  #drop:hover,#drop:focus-visible,#drop.over{background:#d8e6fb;border-color:var(--brand);outline:none}
+  #drop:focus-visible{box-shadow:0 0 0 3px #9dbef0}
+  #drop .big{font-size:1.15rem;font-weight:700;margin:0 0 6px}
+  #drop .small{margin:0;color:var(--muted)}
+  .btn{display:inline-block;margin-top:14px;padding:10px 22px;border-radius:8px;border:0;background:var(--brand);color:#fff;
+       font:inherit;font-weight:700;cursor:pointer}
+  .btn:hover{background:var(--brand-dark)}
+  .btn:focus-visible{outline:3px solid #9dbef0}
+  .btn.primary{font-size:1.1rem;padding:14px 36px}
+
+  /* 안내 글 */
+  .msg{border-radius:8px;padding:12px 14px;margin:14px 0 0;font-size:.97rem}
+  .msg.error{background:var(--err-bg);color:var(--err-ink);border:1px solid #f0b8b8}
+  .msg.warn{background:var(--warn-bg);color:var(--warn-ink);border:1px solid #f1d29a}
+  .msg.ok{background:var(--ok-bg);color:var(--ok-ink);border:1px solid #b6dfc7}
+  .msg:empty{display:none}
+
+  /* 요약 */
+  .stats{display:flex;flex-wrap:wrap;gap:12px;margin:0 0 14px}
+  .stat{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:150px}
+  .stat b{display:block;font-size:1.5rem;line-height:1.3}
+  .stat span{color:var(--muted);font-size:.9rem}
+  .fileinfo{color:var(--muted);font-size:.93rem;margin:0 0 12px;word-break:break-all}
+  .privbox{border:1px solid #e9bcbc;background:var(--priv-bg);border-radius:8px;padding:12px 14px;margin:0 0 16px}
+  .privbox b{color:#8f1d1d}
+  .privbox ul{margin:6px 0 4px 1.2rem;padding:0}
+
+  /* 표 */
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;width:100%;font-size:.93rem}
+  th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#eef1f6;white-space:nowrap;position:sticky;top:0}
+  tr:last-child td{border-bottom:0}
+  #previewTable th,#previewTable td{min-width:110px;max-width:300px;white-space:normal;overflow-wrap:anywhere}
+  #previewTable th{vertical-align:bottom}
+  #previewTable td{vertical-align:top}
+  #previewTable td.masked{color:#a33;background:var(--priv-bg);font-style:italic}
+  #typeTable td.t-title{min-width:220px;max-width:380px;word-break:keep-all;overflow-wrap:anywhere}
+  #typeTable td.t-n{white-space:nowrap;text-align:right}
+  #typeTable input[type=text]{width:100%;min-width:150px;padding:7px 8px;border:1px solid #aab4c5;border-radius:6px;font:inherit}
+  #typeTable select{padding:7px 8px;border:1px solid #aab4c5;border-radius:6px;font:inherit;background:#fff;min-width:130px}
+  #typeTable input:focus-visible,#typeTable select:focus-visible{outline:3px solid #9dbef0;border-color:var(--brand)}
+  #typeTable tr.excluded td{background:#f7f8fa;color:#6a7385}
+  #typeTable tr.privacy td{background:var(--priv-bg)}
+  .reason{color:var(--muted);font-size:.88rem;min-width:200px}
+  .reason .rwarn{display:block;margin-top:4px;color:var(--warn-ink);font-weight:700}
+  .tag{display:inline-block;font-size:.78rem;padding:1px 7px;border-radius:10px;background:#e3e8f1;color:#3a4458;margin-left:6px;white-space:nowrap}
+  #startNote{margin-top:12px}
+
+  /* 2단계: 5점 척도 집계표 */
+  #scaleTable th.rn,#scaleTable td.rn{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  #scaleTable td.q{min-width:180px;font-weight:700}
+  #scaleTable td.chk{text-align:center;font-weight:700;white-space:nowrap}
+  #scaleTable td.chk.ok{color:var(--ok-ink)}
+  #scaleTable td.chk.bad{color:var(--err-ink);background:var(--err-bg)}
+  #scaleTable th.chk{text-align:center}
+  .calcnote{margin:14px 0 0;padding:12px 14px;background:var(--bg);border:1px solid var(--line);border-radius:8px;font-size:.95rem}
+  .calcnote p{margin:0 0 6px}
+  .calcnote p:last-child{margin:0}
+  .excl ul{margin:6px 0 0 1.2rem;padding:0}
+
+  /* 3단계: 선택형 집계, 불성실 응답 */
+  [hidden]{display:none !important}
+  .sub{font-size:1.05rem;margin:24px 0 8px}
+  .chk-line{display:block;margin-top:12px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--bg);cursor:pointer}
+  .chk-line.disabled{opacity:.6;cursor:default}
+  .chk-line input{width:20px;height:20px;vertical-align:middle;margin-right:6px}
+  .hint-inline{display:block;margin:2px 0 0 30px;color:var(--muted);font-size:.9rem}
+  .used{margin:10px 0 0;font-weight:700}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
+  .qcard{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:#fff;min-width:0}
+  .qcard h4{margin:0 0 4px;font-size:1rem}
+  .qcard .meta{margin:0 0 8px;color:var(--muted);font-size:.9rem}
+  .qcard .scroll{max-height:420px;overflow:auto}
+  .qcard th.rn,.qcard td.rn{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .qcard td.opt{overflow-wrap:anywhere}
+  .qcard tr.sum td{font-weight:700;background:#f4f6f9}
+
+  /* 4단계: 요약 카드, 그래프 */
+  .scards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:0 0 6px}
+  .scard{background:#f3f6fb;border:1px solid #c9d5ea;border-top:4px solid #243f7a;border-radius:10px;padding:12px 14px;min-width:0}
+  .scard .sl{display:block;color:#243f7a;font-size:.9rem;font-weight:700}
+  .scard .sv{display:block;font-size:1.9rem;line-height:1.3;margin:2px 0;color:#1d2433}
+  .scard .sv.text{font-size:1.1rem;line-height:1.45;overflow-wrap:anywhere}
+  .scard .ss{display:block;color:var(--muted);font-size:.85rem;overflow-wrap:anywhere}
+  .fig{margin:0 0 20px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff}
+  .figbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+  .figcap{font-weight:700}
+  .figfile{color:var(--muted);font-size:.88rem;overflow-wrap:anywhere}
+  .btn.small{margin:0;padding:7px 16px;font-size:.93rem}
+  .svgwrap{overflow-x:auto}
+  .svgwrap svg{display:block;max-width:100%;height:auto}
+
+  /* 5단계: 서술형 의견 */
+  .kwbox{border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:12px 0 0;background:#fff}
+  .kwbox>summary{cursor:pointer;font-weight:700}
+  .kwrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0}
+  .kwrow>b{min-width:112px}
+  .chip{display:inline-flex;align-items:center;background:var(--brand-soft);border:1px solid #bcd0f0;border-radius:14px;padding:1px 2px 1px 10px;font-size:.92rem}
+  .chip button{border:0;background:none;cursor:pointer;font-size:1.05rem;line-height:1;color:#3a4458;padding:3px 7px}
+  .chip button:hover{color:#8f1d1d}
+  .kwin{width:130px;padding:6px 8px;border:1px solid #aab4c5;border-radius:6px;font:inherit}
+  .kwin:focus-visible{outline:3px solid #9dbef0;border-color:var(--brand)}
+  .tcard{border:1px solid var(--line);border-radius:10px;padding:14px;margin:0 0 16px;background:#fff}
+  .tcard h4{margin:0 0 6px;font-size:1.02rem;overflow-wrap:anywhere}
+  .tstats{margin:0 0 4px}
+  .tmeta{color:var(--muted);font-size:.9rem;margin:0 0 10px;overflow-wrap:anywhere}
+  .tcard th.rn,.tcard td.rn{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .tcard tr.sum td{font-weight:700;background:#f4f6f9}
+  .tsub{margin:16px 0 4px;font-size:1rem}
+  .tgroup{border:1px solid var(--line);border-radius:8px;margin:8px 0;background:#fbfcfe}
+  .tgroup>summary{cursor:pointer;padding:9px 12px;font-weight:700}
+  .tgroup ul{list-style:none;margin:0;padding:0 12px 6px}
+  .titem{border-top:1px solid var(--line);padding:10px 0}
+  .ttext{white-space:pre-wrap;overflow-wrap:anywhere}
+  .tfoot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:6px;font-size:.88rem;color:var(--muted)}
+  .tfoot select{padding:5px 7px;border:1px solid #aab4c5;border-radius:6px;font:inherit;background:#fff;color:var(--ink)}
+  .tfoot select:focus-visible{outline:3px solid #9dbef0}
+  .linkbtn{background:none;border:0;color:var(--brand);text-decoration:underline;cursor:pointer;font:inherit;padding:0}
+  .center{text-align:center}
+
+  /* 6단계: 조사 개요 입력, 보고서 */
+  .ovgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  .ovgrid label{display:flex;flex-direction:column;gap:4px;font-weight:700;font-size:.95rem}
+  .ovgrid input{padding:9px 10px;border:1px solid #aab4c5;border-radius:6px;font:inherit;font-weight:400}
+  .ovgrid input:focus-visible{outline:3px solid #9dbef0;border-color:var(--brand)}
+  .ovhint{font-weight:400;font-size:.82rem;color:var(--muted)}
+  .rptbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 10px}
+  .rptbar .hint{margin:0;flex:1 1 280px}
+  .a4wrap{overflow-x:auto;background:#dfe4ec;padding:18px;border-radius:10px}
+  .a4{width:210mm;min-height:297mm;margin:0 auto;background:#fff;color:#000;padding:20mm 18mm;box-sizing:border-box;
+      box-shadow:0 2px 10px rgba(0,0,0,.25);font-family:"Malgun Gothic","맑은 고딕","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+      font-size:11pt;line-height:1.65;word-break:keep-all;overflow-wrap:anywhere}
+  .a4:focus{outline:2px solid #7fa6e6}
+  .a4 table{break-inside:auto}
+  .a4 tr{page-break-inside:avoid}
+  .a4 h2{break-after:avoid}
+  .a4 .pg > h2:first-child{margin-top:0 !important}
+  .a4 .pg + .pg{border-top:2px dashed #9aa6bd;margin-top:28px;padding-top:24px}
+  .a4 table,.a4 th,.a4 td{border-color:#000}
+  .a4 *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  .aigrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px 16px;margin:0 0 6px}
+  .aigrid label{display:flex;flex-direction:column;gap:4px;font-weight:700}
+  .aigrid input{padding:9px 10px;border:1px solid #aab4c5;border-radius:6px;font:inherit;font-weight:400}
+  .aigrid input:focus-visible{outline:3px solid #9dbef0;border-color:var(--brand)}
+  .aibtnrow{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 4px}
+  .aibtnrow .btn{margin-top:0}
+  .aibusy{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+  .aibusy .btn{margin-top:0}
+  .aicard{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:14px 0 0;background:#fff}
+  .aihd{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:baseline}
+  .aihd .aimeta{color:var(--muted);font-size:.88rem;flex:1 1 auto}
+  .aibody{margin:8px 0;padding:10px 12px;border:1px solid #aab4c5;border-radius:8px;background:#fbfcfe;line-height:1.7;min-height:3em}
+  .aibody:focus{outline:3px solid #9dbef0}
+  .ailine{margin:2px 0}
+  .aifill{border-bottom:2px solid #5b7fc7;padding:0 1px}
+  .aifill.unres{background:#ffe600;color:#000;border-bottom-color:#b39b00}
+  .aiact{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .aiact .btn{margin-top:0}
+  .aiflag{margin:6px 0}
+  .airow{border-top:1px solid var(--line);padding:10px 0}
+  .aimeta2{color:var(--muted);font-size:.88rem}
+  .aitxt{margin:3px 0 6px;white-space:pre-wrap;overflow-wrap:anywhere}
+  .airow .btn{margin-top:0;margin-left:6px}
+  dialog#aiDlg{max-width:780px;width:calc(100% - 32px);border:1px solid var(--line);border-radius:12px;padding:20px;color:var(--ink)}
+  dialog#aiDlg::backdrop{background:rgba(0,0,0,.45)}
+  dialog#aiDlg h3{margin:0 0 8px}
+  .aid dt{font-weight:700;margin-top:10px}
+  .aid dd{margin:2px 0 0}
+  .aid ul{margin:2px 0;padding-left:20px}
+  #aiDlgText{max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;font-size:.9rem}
+  .aid-btns{display:flex;gap:10px;justify-content:flex-end;margin-top:10px}
+  .aid-btns .btn{margin-top:0}
+  #verTable td{vertical-align:top}
+  #verTable td.vst{white-space:nowrap;font-weight:700}
+  #verTable .vok{color:var(--ok-ink)} #verTable .vwarn{color:var(--warn-ink)} #verTable .verr{color:var(--err-ink)}
+  #verTable tr.vgrp td{background:#eef2f9;font-weight:700;color:#243f7a}
+  #verResult .chk-line{margin-top:12px}
+
+  /* 인쇄: 보고서만 나오게 */
+  @page{size:A4;margin:14mm 14mm}
+  @media print{
+    html,body{background:#fff !important}
+    .wrap{max-width:none;padding:0}
+    .wrap > :not(#s6){display:none !important}
+    #s6{border:0;padding:0;margin:0;background:none}
+    #s6 > :not(#reportBox){display:none !important}
+    #reportBox > :not(#reportWrap){display:none !important}
+    .a4wrap{background:none;padding:0;overflow:visible}
+    .a4{width:auto;min-height:0;margin:0;padding:0;box-shadow:none}
+    .a4 .pg + .pg{border-top:0;margin-top:0;padding-top:0}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>설문결과보고서 도우미</h1>
+  <p class="lead">1단계 · 설문 응답 파일을 올리고, 문항 종류가 맞는지 확인합니다.</p>
+
+  <!-- 1. 파일 올리기 -->
+  <section aria-labelledby="h1">
+    <h2 id="h1"><span class="num">1</span>응답 파일 올리기</h2>
+    <div id="drop" role="button" tabindex="0" aria-label="파일을 끌어다 놓거나, 눌러서 파일을 고르세요">
+      <p class="big">여기에 파일을 끌어다 놓으세요</p>
+      <p class="small">구글폼·네이버폼에서 내려받은 엑셀(xlsx) 또는 CSV 파일</p>
+      <span class="btn">파일 고르기</span>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.csv" hidden>
+    <p class="hint">올린 파일은 이 컴퓨터 안에서만 읽습니다. 밖으로 보내지도, 저장하지도 않습니다.</p>
+    <div id="msg" class="msg" role="alert" aria-live="assertive"></div>
+
+    <div class="ovbox" id="ovBox">
+      <h3 class="sub" style="margin-top:20px">조사 개요 입력</h3>
+      <p class="hint" style="margin:0 0 10px">결과보고서에 들어가는 내용입니다. 비워 두면 보고서에 노란색 [입력 필요]로 표시됩니다.</p>
+      <div class="ovgrid">
+        <label>조사명<input type="text" id="ov_title" autocomplete="off"></label>
+        <label>기관<input type="text" id="ov_org" autocomplete="off"></label>
+        <label>부서<input type="text" id="ov_dept" autocomplete="off"></label>
+        <label>작성자<input type="text" id="ov_author" autocomplete="off"></label>
+        <label>조사 기간<input type="text" id="ov_period" autocomplete="off"><span class="ovhint">예) 2026. 10. 1. ~ 10. 15.</span></label>
+        <label>조사 대상<input type="text" id="ov_target" autocomplete="off"><span class="ovhint">예) 전시 관람객</span></label>
+        <label>조사 방법<input type="text" id="ov_method" autocomplete="off"><span class="ovhint">예) 온라인 설문(구글폼)</span></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. 응답 확인 -->
+  <section id="s2" hidden aria-labelledby="h2">
+    <h2 id="h2"><span class="num">2</span>올린 파일 확인</h2>
+    <p class="fileinfo" id="fileInfo"></p>
+    <div class="stats">
+      <div class="stat"><b id="statRows">0</b><span>전체 응답 수 (건)</span></div>
+      <div class="stat"><b id="statCols">0</b><span>문항(열) 수 (개)</span></div>
+    </div>
+    <div class="privbox" id="privBox"></div>
+    <h3 style="font-size:1rem;margin:0 0 8px">처음 5행 미리보기</h3>
+    <div class="scroll"><table id="previewTable"></table></div>
+    <p class="hint">개인정보 열의 내용은 화면에서 가렸습니다.</p>
+  </section>
+
+  <!-- 3. 문항 종류 -->
+  <section id="s3" hidden aria-labelledby="h3">
+    <h2 id="h3"><span class="num">3</span>문항 종류 확인</h2>
+    <p class="hint" style="margin:0 0 12px">프로그램이 열마다 종류를 추정했습니다. 틀린 것은 '종류' 칸에서 직접 고쳐 주세요. '짧은 이름' 칸에는 원문 제목이 그대로 들어 있어요. 표와 그림에서 너무 길어 보이면 줄여서 고쳐 쓰세요(표와 그래프에 이 이름이 쓰입니다).</p>
+    <div class="scroll"><table id="typeTable"></table></div>
+  </section>
+
+  <!-- 4. 분석 시작 -->
+  <section id="s4" hidden class="center">
+    <button type="button" class="btn primary" id="startBtn">분석 시작</button>
+    <div id="startNote" class="msg warn" role="status"></div>
+  </section>
+
+  <!-- 5. 5점 척도 집계표 -->
+  <section id="s5" hidden aria-labelledby="h5">
+    <h2 id="h5"><span class="num">4</span>분석 결과</h2>
+    <div id="staleMsg" class="msg warn" role="status"></div>
+    <div class="scards" id="summaryCards"></div>
+
+    <h3 class="sub">불성실 응답 찾기</h3>
+    <div id="sincereBox" class="msg" role="status"></div>
+    <label class="chk-line" id="excludeLabel">
+      <input type="checkbox" id="excludeBad">
+      <b>불성실 응답 제외하고 계산</b>
+      <span class="hint-inline">체크하면 아래 모든 표를 다시 계산합니다. 기본은 포함입니다. (찾은 응답이 없으면 체크할 수 없어요)</span>
+    </label>
+    <p class="used" id="usedInfo"></p>
+
+    <div id="scaleBlock">
+      <h3 class="sub">5점 척도 문항 집계표</h3>
+      <div class="scroll"><table id="scaleTable"></table></div>
+      <div id="exclInfo" class="msg excl" role="status"></div>
+    </div>
+
+    <div id="singleBlock">
+      <h3 class="sub">단일 선택 문항</h3>
+      <div id="singleCards" class="cards"></div>
+    </div>
+
+    <div id="multiBlock">
+      <h3 class="sub">복수 선택 문항</h3>
+      <div class="msg warn">복수 선택이라 비율을 모두 더하면 100%를 넘을 수 있어요.</div>
+      <div id="multiCards" class="cards" style="margin-top:12px"></div>
+    </div>
+
+    <div id="textBlock">
+      <h3 class="sub">서술형 의견 정리</h3>
+      <div class="msg warn">전화번호와 이메일 모양은 [가림]으로 바꿔 보여 줍니다. 이름이나 주소처럼 다른 개인정보는 가리지 못하니, 보고서에 쓰기 전에 의견을 직접 확인해 주세요.</div>
+      <details class="kwbox" open>
+        <summary>분야별 키워드 (더하거나 빼서 분류를 바꿀 수 있어요)</summary>
+        <p class="hint" style="margin:8px 0">의견을 띄어쓰기로 나눈 낱말 안에서 키워드를 찾아, 키워드가 가장 많이 맞은 분야로 나눕니다(같은 키워드가 여러 번 나와도 한 번으로 셉니다). 수가 같으면 교육·프로그램 → 정보·접근성 → 시설·인프라 → 전시·해설 → 칭찬·기타 순서입니다. "부족, 필요, 주세요, 좋겠, 불편, 아쉽" 같은 요청 표현이 있으면 칭찬·기타로 나누지 않고, 어디에도 안 맞으면 "미분류"입니다. 키워드는 띄어쓰기 없는 낱말 하나로 적어 주세요.</p>
+        <div id="kwEditor"></div>
+        <div id="kwMsg" class="msg" role="alert"></div>
+        <button type="button" class="btn small" id="kwReset" style="margin-top:10px;background:#5b6578">처음 키워드로 되돌리기</button>
+      </details>
+      <div id="textMsg" class="msg" role="status" style="margin-top:12px"></div>
+      <div id="textCols" style="margin-top:12px"></div>
+    </div>
+
+    <div id="graphBlock">
+      <h3 class="sub">그래프</h3>
+      <p class="hint" style="margin:0 0 10px">"그림 저장(PNG)"을 누르면 그림이 파일로 저장됩니다(크롬 다운로드 폴더). 보고서 문서에 붙여 넣어 쓰세요.</p>
+      <div id="figMsg" class="msg" role="status"></div>
+      <div id="graphArea"></div>
+    </div>
+
+    <div class="calcnote" id="calcNote"></div>
+  </section>
+
+  <!-- 5. 글쓰기 도움 (선택) -->
+  <section id="s5a" hidden aria-labelledby="h5a">
+    <h2 id="h5a"><span class="num">5</span>글쓰기 도움 (선택)</h2>
+    <div class="msg warn" style="margin:0 0 12px"><b>이 기능은 쓰지 않아도 됩니다.</b> 쓰지 않으면 조사 내용은 밖으로 나가지 않아요. 쓰면, 확인창에 보이는 내용(가림 처리한 서술형 글과 계산 결과)이 <b>Google(Gemini) 서버로 전송</b>됩니다. 확인창에서 "보내기"를 눌러야만 보내집니다.</div>
+    <div class="aigrid">
+      <label>API 키
+        <input type="password" id="aiKey" autocomplete="new-password" spellcheck="false" autocapitalize="off" data-lpignore="true" placeholder="Google AI Studio(ai.google.dev)에서 만든 키">
+        <span class="ovhint">키는 이 화면에만 있고 어디에도 저장하지 않아요. 새로고침하거나 창을 닫으면 사라집니다.</span>
+      </label>
+      <label>모델 이름
+        <input type="text" id="aiModel" autocomplete="off" spellcheck="false">
+        <span class="ovhint">모델 이름은 Google이 바꿀 수 있어요. "연결 시험"에서 오류가 나면 공식 문서(ai.google.dev)의 모델 목록을 보고 고쳐 주세요.</span>
+      </label>
+    </div>
+    <div class="rptbar">
+      <button type="button" class="btn small" id="aiTestBtn">연결 시험</button>
+      <button type="button" class="btn small" id="aiClearKey">키 지우기</button>
+      <span class="hint">연결 시험에는 키와 모델 이름만 보냅니다. 조사 내용은 보내지 않아요.</span>
+    </div>
+    <div id="aiConn" class="msg" role="status"></div>
+
+    <h3 class="sub">글쓰기 도움 받기</h3>
+    <div class="aibtnrow">
+      <button type="button" class="btn" data-ai="cls">① 서술형 분류 다시 보기</button>
+      <button type="button" class="btn" data-ai="improve">② 개선 방안 초안</button>
+      <button type="button" class="btn" data-ai="overall">③ 종합 평가 문장</button>
+    </div>
+    <p class="hint">①은 지금 분류와 다르게 나온 의견만 보여 주고, ②③은 고칠 수 있는 카드로 보여 줍니다. 카드의 "보고서에 넣기"를 눌러야만 보고서에 들어가고, 그 뒤에는 아래 "검증"을 다시 해야 합니다.</p>
+    <div id="aiBusy" class="msg aibusy" hidden role="status"><b id="aiBusyText"></b> <span id="aiElapsed"></span> <button type="button" class="btn small" id="aiStop">멈추기</button></div>
+    <div id="aiMsg" class="msg" role="status"></div>
+    <div id="aiCards"></div>
+  </section>
+
+  <!-- 5. 검증 -->
+  <section id="s5v" hidden aria-labelledby="h5v">
+    <h2 id="h5v"><span class="num">6</span>검증</h2>
+    <p class="hint" style="margin:0 0 12px">화면의 표를 만들 때 쓴 계산과는 다른 방법으로, 원래 표를 처음부터 다시 세어 화면의 숫자와 맞춰 봅니다. 보고서 초안도 미리 만들어 숫자, 표현, 개인정보, [입력 필요]를 확인합니다. 오류가 없고 확인 필요 항목을 모두 판단해야 보고서 화면으로 넘어갈 수 있어요.</p>
+    <button type="button" class="btn primary" id="verBtn">검증 시작</button>
+    <div id="verMsg" class="msg" role="status"></div>
+    <div id="verResult" hidden>
+      <div id="verSummary" class="msg" role="status"></div>
+      <div class="scroll"><table id="verTable"></table></div>
+      <label class="chk-line" id="verAckLine" hidden>
+        <input type="checkbox" id="verAck">
+        <b>모두 보고 판단했습니다</b>
+        <span class="hint-inline">⚠ 확인 필요 항목을 모두 읽고 판단했을 때 체크하세요.</span>
+      </label>
+      <div id="verGoMsg" class="msg" role="status"></div>
+      <button type="button" class="btn primary" id="verGo" disabled>보고서 화면으로 넘어가기</button>
+    </div>
+  </section>
+
+  <!-- 6. 결과보고서 초안 -->
+  <section id="s6" hidden aria-labelledby="h6">
+    <h2 id="h6"><span class="num">7</span>결과보고서 초안</h2>
+    <p class="hint" style="margin:0 0 12px">위의 조사 개요와 분석 결과로 개조식 보고서를 만듭니다. 만든 뒤에는 보고서 안을 클릭해서 바로 고칠 수 있어요.</p>
+    <button type="button" class="btn primary" id="reportBtn">보고서 초안 만들기</button>
+    <div id="reportMsg" class="msg" role="status"></div>
+    <div id="reportStale" class="msg warn" role="status"></div>
+    <div id="reportBox" hidden>
+      <div class="rptbar">
+        <button type="button" class="btn small" id="copyBtn">복사하기</button>
+        <button type="button" class="btn small" id="printBtn">인쇄 / PDF 저장</button>
+        <span class="hint">복사하면 표까지 함께 복사되어 한글·구글 문서에 붙여 넣을 수 있어요. 인쇄에는 보고서만 나옵니다. 노란색 표시는 인쇄에도 나오니, 모두 고친 뒤에 인쇄하세요.</span>
+      </div>
+      <div class="a4wrap" id="reportWrap">
+        <div class="a4" id="report" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" aria-label="결과보고서 초안 (클릭해서 고칠 수 있음)"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+
+<dialog id="aiDlg" aria-labelledby="aiDlgTitle">
+  <h3 id="aiDlgTitle">Google로 보내기 전에 확인해 주세요</h3>
+  <p class="aid-what"><b id="aiDlgWhat"></b>을(를) 만들려고 아래 내용을 보냅니다.</p>
+  <dl class="aid">
+    <dt>받는 곳</dt><dd id="aiDlgTo"></dd>
+    <dt>보내는 것</dt><dd><ul id="aiDlgSendList"></ul></dd>
+    <dt>보내지 않는 것</dt><dd><ul id="aiDlgNoList"></ul></dd>
+  </dl>
+  <details id="aiDlgDetails"><summary>보낼 글 전체 보기</summary><pre id="aiDlgText"></pre></details>
+  <p class="hint">"보내기"를 누르기 전에는 아무것도 보내지 않습니다.</p>
+  <div class="aid-btns"><button type="button" class="btn" id="aiDlgCancelBtn" autofocus>취소</button> <button type="button" class="btn primary" id="aiDlgSendBtn">보내기</button></div>
+</dialog>
+
+<!-- 엑셀 읽기 도구: SheetJS 공식 배포처. 문서에 안내된 최신 버전(0.20.3)으로 고정해 사용합니다. -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" onerror="window.__xlsxFailed=true"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- 기본 설정 ---------- */
+  var PRIVACY_RE = /이름|성명|연락처|전화|휴대폰|핸드폰|이메일|메일|주소/;
+  var DATE_HEAD_RE = /타임스탬프|timestamp|제출\s*(일|시)|응답\s*(일|시)/i;
+  var DATE_VAL_RE = /^\d{4}\s*[-./년]\s*\d{1,2}\s*[-./월]\s*\d{1,2}/;
+  var TYPES = [
+    ['scale', '5점 척도'],
+    ['single', '단일 선택'],
+    ['multi', '복수 선택'],
+    ['text', '서술형'],
+    ['privacy', '개인정보(제외)'],
+    ['skip', '제외']
+  ];
+  var TYPE_LABEL = {};
+  TYPES.forEach(function (t) { TYPE_LABEL[t[0]] = t[1]; });
+
+  var cols = [];   // 열 정보 목록
+  var rows = [];   // 응답 행 목록 (문자열 배열)
+  var rowNums = [];   // 응답 행마다 원본 엑셀 행 번호 (제목 행 = 1행)
+  var analyzed = false;   // 집계표를 만든 적이 있는지
+  var snap = null;        // "분석 시작"을 누른 시점의 문항 목록과 불성실 응답
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function UserError(message) { this.message = message; }
+
+  function showMsg(kind, text) {
+    var m = $('msg');
+    m.className = 'msg ' + kind;
+    m.textContent = text;
+  }
+  function clearMsg() { var m = $('msg'); m.className = 'msg'; m.textContent = ''; }
+
+  /* ---------- CSV 읽기 ---------- */
+  function decodeCSV(buf) {
+    var bytes = new Uint8Array(buf);
+    try {
+      return { text: new TextDecoder('utf-8', { fatal: true }).decode(bytes), enc: 'UTF-8' };
+    } catch (e) {
+      // UTF-8로 읽으면 글자가 깨지는 파일 → EUC-KR로 다시 읽기
+      return { text: new TextDecoder('euc-kr').decode(bytes), enc: 'EUC-KR (글자가 깨져서 다시 읽음)' };
+    }
+  }
+
+  function parseCSV(t) {
+    var out = [], row = [], f = '', q = false, n = t.length, i, c;
+    for (i = 0; i < n; i++) {
+      c = t.charAt(i);
+      if (q) {
+        if (c === '"') {
+          if (t.charAt(i + 1) === '"') { f += '"'; i++; } else { q = false; }
+        } else { f += c; }
+      } else if (c === '"' && f === '') {
+        q = true;
+      } else if (c === ',') {
+        row.push(f); f = '';
+      } else if (c === '\r' || c === '\n') {
+        if (c === '\r' && t.charAt(i + 1) === '\n') i++;
+        row.push(f); out.push(row); row = []; f = '';
+      } else {
+        f += c;
+      }
+    }
+    if (f !== '' || row.length) { row.push(f); out.push(row); }
+    return out;
+  }
+
+  /* ---------- 엑셀 값을 글자로 바꾸기 ---------- */
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function cellToString(v) {
+    if (v === null || v === undefined) return '';
+    if (v instanceof Date) {
+      if (isNaN(v.getTime())) return '';
+      return v.getFullYear() + '-' + pad(v.getMonth() + 1) + '-' + pad(v.getDate()) + ' ' +
+             pad(v.getHours()) + ':' + pad(v.getMinutes()) + ':' + pad(v.getSeconds());
+    }
+    return String(v);
+  }
+
+  /* ---------- 파일 → 표(행/열) ---------- */
+  function readXlsx(buf) {
+    if (typeof XLSX === 'undefined') {
+      throw new UserError('엑셀을 읽는 도구를 불러오지 못했어요. 인터넷에 연결되어 있는지 확인하고 F5 키로 새로고침해 주세요. CSV 파일은 인터넷 없이도 올릴 수 있습니다.');
+    }
+    var wb;
+    try {
+      wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    } catch (e) {
+      throw new UserError('엑셀 파일을 열 수 없어요. 암호가 걸려 있거나 파일이 망가졌을 수 있습니다. 엑셀에서 암호를 풀고 다시 저장한 뒤 올려 주세요.');
+    }
+    if (!wb.SheetNames || !wb.SheetNames.length) {
+      throw new UserError('엑셀 파일 안에 시트가 없어요. 응답이 들어 있는 파일이 맞는지 확인해 주세요.');
+    }
+    var name = wb.SheetNames[0];
+    var ws = wb.Sheets[name];
+    // 실제로 값이 들어 있는 칸의 범위를 직접 찾아서, 빈 행도 그대로 두고 읽는다.
+    // (그래야 불성실 응답 등에 쓰는 '엑셀 행 번호'가 원본과 같아진다)
+    var minR = Infinity, maxR = -1, maxC = -1;
+    Object.keys(ws || {}).forEach(function (k) {
+      if (k.charAt(0) === '!') return;
+      var a = XLSX.utils.decode_cell(k);
+      if (a.r < minR) minR = a.r;
+      if (a.r > maxR) maxR = a.r;
+      if (a.c > maxC) maxC = a.c;
+    });
+    var aoa = [], offset = 0;
+    if (maxR >= 0) {
+      aoa = XLSX.utils.sheet_to_json(ws, {
+        header: 1, raw: true, defval: '', blankrows: true,
+        range: { s: { r: minR, c: 0 }, e: { r: maxR, c: maxC } }
+      });
+      offset = minR;   // 첫 줄이 엑셀 몇 행인지 (0이면 1행)
+    }
+    return { aoa: aoa, sheet: name, sheetCount: wb.SheetNames.length, offset: offset };
+  }
+
+  function normalize(aoa, offset) {
+    // 글자로 바꾸고 앞뒤 공백 정리. 각 줄에 원래 엑셀 행 번호(orig)를 붙여 둔다.
+    var width = aoa.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+    var grid = aoa.map(function (r, i) {
+      var x = [], j;
+      for (j = 0; j < width; j++) x.push(cellToString(r[j]).trim());
+      x.orig = offset + i + 1;
+      return x;
+    });
+    // 완전히 빈 행 빼기
+    grid = grid.filter(function (r) { return r.some(function (c) { return c !== ''; }); });
+    if (!grid.length) {
+      throw new UserError('파일이 비어 있어요. 첫 행에 문항 제목이 있는 응답 파일을 올려 주세요.');
+    }
+    var header = grid[0], data = grid.slice(1);
+    if (!data.length) {
+      throw new UserError('문항 제목만 있고 응답이 하나도 없어요. 응답이 들어 있는 파일을 올려 주세요.');
+    }
+    // 제목도 없고 내용도 없는 열 빼기
+    var keep = [];
+    header.forEach(function (h, j) {
+      var has = h !== '' || data.some(function (r) { return r[j] !== ''; });
+      if (has) keep.push(j);
+    });
+    return {
+      headers: keep.map(function (j, k) { return header[j] !== '' ? header[j] : '(제목 없는 ' + (k + 1) + '번째 열)'; }),
+      rows: data.map(function (r) { return keep.map(function (j) { return r[j]; }); }),
+      rowNums: data.map(function (r) { return r.orig; })
+    };
+  }
+
+  /* ---------- 열 종류 추정 ---------- */
+  function inferType(title, vals) {
+    var m = title.match(PRIVACY_RE);
+    if (m) return { type: 'privacy', reason: '제목에 "' + m[0] + '"이(가) 있어서 개인정보로 봤어요.' };
+    if (!vals.length) return { type: 'skip', reason: '답한 사람이 없어서 뺐어요.' };
+
+    var dateCount = vals.filter(function (v) { return DATE_VAL_RE.test(v); }).length;
+    if (DATE_HEAD_RE.test(title) || dateCount / vals.length >= 0.9) {
+      return { type: 'skip', reason: '날짜·시간 열이라서 뺐어요.' };
+    }
+
+    var allScale = vals.every(function (v) {
+      var x = Number(v);
+      return v !== '' && !isNaN(x) && Number.isInteger(x) && x >= 1 && x <= 5;
+    });
+    if (allScale) return { type: 'scale', reason: '답이 모두 1~5 숫자예요.' };
+
+    var withComma = vals.filter(function (v) { return /[,，]/.test(v); });
+    if (withComma.length >= 2 && withComma.length / vals.length >= 0.1) {
+      var items = [];
+      vals.forEach(function (v) {
+        v.split(/[,，]/).forEach(function (s) { s = s.trim(); if (s) items.push(s); });
+      });
+      var distinctItems = new Set(items).size;
+      var shortShare = items.filter(function (s) { return s.length <= 40; }).length / items.length;
+      var avgCell = vals.reduce(function (a, v) { return a + v.length; }, 0) / vals.length;
+      if (shortShare >= 0.9 && distinctItems <= 30 && distinctItems <= items.length * 0.5 && avgCell <= 100) {
+        return { type: 'multi', reason: '한 칸에 쉼표로 나눈 짧은 답이 여러 개 들어 있어요.' };
+      }
+    }
+
+    var d = new Set(vals).size, n = vals.length, ratio = d / n;
+    var total = vals.reduce(function (a, v) { return a + v.length; }, 0);
+    var avg = total / n;
+    var max = vals.reduce(function (a, v) { return Math.max(a, v.length); }, 0);
+    var longish = avg >= 25 || max >= 60;
+    if (longish) {
+      if (ratio > 0.5 || d > 12) return { type: 'text', reason: '글이 길고 서로 다른 답이 많아요.' };
+      return { type: 'single', reason: '같은 답이 반복돼요. (서로 다른 답 ' + d + '가지)' };
+    }
+    if (d <= 12 && ratio <= 0.6) return { type: 'single', reason: '같은 답이 반복돼요. (서로 다른 답 ' + d + '가지)' };
+    return { type: 'text', reason: '서로 다른 답이 많아요. (서로 다른 답 ' + d + '가지)' };
+  }
+
+  function autoShortName(title) {
+    return title;   // 처음에는 원문 제목 전체를 넣어 둔다. 줄이는 것은 사람이 직접 한다.
+  }
+
+  /* ---------- 화면 그리기 ---------- */
+  function renderPrivacy() {
+    var list = cols.filter(function (c) { return c.type === 'privacy'; });
+    var box = $('privBox');
+    var html;
+    if (list.length) {
+      html = '<b>개인정보로 보고 뺀 열 (' + list.length + '개)</b><ul>' +
+        list.map(function (c) { return '<li>' + esc(c.title) + '</li>'; }).join('') + '</ul>';
+    } else {
+      html = '<b>개인정보로 보고 뺀 열이 없어요.</b><br>';
+    }
+    html += '<span class="hint" style="display:block">열 제목만 보고 찾습니다. 서술형 답변 안에 적힌 이름·연락처는 걸러내지 못하니, 보고서에 쓰기 전에 직접 확인해 주세요.</span>';
+    box.innerHTML = html;
+  }
+
+  function renderPreview() {
+    var shown = rows.slice(0, 5);
+    var html = '<thead><tr><th>번호</th>' + cols.map(function (c) {
+      return '<th title="' + esc(c.title) + '">' + esc(c.title) + '</th>';
+    }).join('') + '</tr></thead><tbody>';
+    shown.forEach(function (r, i) {
+      html += '<tr><td>' + (i + 1) + '</td>' + cols.map(function (c) {
+        if (c.type === 'privacy') return '<td class="masked">(가림)</td>';
+        return '<td>' + esc(maskPII(r[c.idx]).t) + '</td>';
+      }).join('') + '</tr>';
+    });
+    html += '</tbody>';
+    $('previewTable').innerHTML = html;
+  }
+
+  function rowClass(c) {
+    return c.type === 'privacy' ? 'privacy' : (c.type === 'skip' ? 'excluded' : '');
+  }
+
+  function reasonHtml(c) {
+    var h = esc(c.reason);
+    if (c.autoType !== c.type) h += ' <span class="tag">직접 고침</span>';
+    if (c.privacyWord && c.type !== 'privacy' && c.type !== 'skip') {
+      h += '<span class="rwarn">⚠ 개인정보 낱말이 있는 열을 분석에 넣었어요. 이름·연락처가 들어 있지 않은지 확인해 주세요.</span>';
+    }
+    return h;
+  }
+
+  function renderTypeTable() {
+    var html = '<thead><tr><th>번호</th><th>문항 제목 (원문)</th><th>짧은 이름</th><th>답한 사람 수</th><th>종류</th><th>추정한 이유</th></tr></thead><tbody>';
+    cols.forEach(function (c, k) {
+      html += '<tr id="row' + k + '" class="' + rowClass(c) + '">' +
+        '<td>' + (k + 1) + '</td>' +
+        '<td class="t-title">' + esc(c.title) + '</td>' +
+        '<td><input type="text" data-k="' + k + '" class="short" value="' + esc(c.short) + '" aria-label="' + (k + 1) + '번 문항 짧은 이름"></td>' +
+        '<td class="t-n">' + c.n + '명</td>' +
+        '<td><select data-k="' + k + '" class="typesel" aria-label="' + (k + 1) + '번 문항 종류">' +
+          TYPES.map(function (t) {
+            return '<option value="' + t[0] + '"' + (t[0] === c.type ? ' selected' : '') + '>' + t[1] + '</option>';
+          }).join('') +
+        '</select></td>' +
+        '<td class="reason" id="reason' + k + '">' + reasonHtml(c) + '</td>' +
+      '</tr>';
+    });
+    html += '</tbody>';
+    $('typeTable').innerHTML = html;
+  }
+
+  /* ---------- 파일 불러오기 ---------- */
+  function loadFile(file, extraNote) {
+    var lower = file.name.toLowerCase();
+    var isCsv = lower.slice(-4) === '.csv';
+    var isXlsx = lower.slice(-5) === '.xlsx';
+    if (!isCsv && !isXlsx) {
+      showMsg('error', '"' + file.name + '"은(는) 읽을 수 없는 파일이에요. 구글폼·네이버폼에서 엑셀(xlsx) 또는 CSV 파일로 내려받아 다시 올려 주세요.');
+      return;
+    }
+    showMsg('ok', '파일을 읽는 중입니다…');
+
+    var reader = new FileReader();
+    reader.onerror = function () {
+      showMsg('error', '파일을 읽지 못했어요. 파일이 다른 프로그램에서 열려 있으면 닫고, 다시 올려 주세요.');
+    };
+    reader.onload = function () {
+      try {
+        var aoa, info = '', offset = 0;
+        if (isCsv) {
+          var d = decodeCSV(reader.result);
+          aoa = parseCSV(d.text);
+          info = '읽은 글자 방식: ' + d.enc;
+        } else {
+          var x = readXlsx(reader.result);
+          aoa = x.aoa;
+          offset = x.offset;
+          info = '읽은 시트: ' + x.sheet + (x.sheetCount > 1 ? ' (시트가 ' + x.sheetCount + '개 있지만 첫 번째만 읽었어요)' : '');
+        }
+        var t = normalize(aoa, offset);
+        build(file, info, t.headers, t.rows, t.rowNums);
+        if (extraNote) showMsg('warn', extraNote); else clearMsg();
+      } catch (e) {
+        if (e instanceof UserError) {
+          showMsg('error', e.message);
+        } else {
+          showMsg('error', '파일을 처리하는 중 문제가 생겼어요. 파일이 구글폼·네이버폼에서 내려받은 그대로인지 확인하고, 다시 올려 주세요.');
+          if (window.console) console.error(e);
+        }
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function build(file, info, headers, data, nums) {
+    rows = data;
+    rowNums = nums;
+    cols = headers.map(function (title, j) {
+      var vals = data.map(function (r) { return r[j]; }).filter(function (v) { return v !== ''; });
+      var g = inferType(title, vals);
+      return {
+        idx: j, title: title, short: autoShortName(title),
+        n: vals.length, type: g.type, autoType: g.type, reason: g.reason,
+        privacyWord: PRIVACY_RE.test(title)
+      };
+    });
+
+    $('fileInfo').textContent = '파일: ' + file.name + (info ? '  ·  ' + info : '');
+    $('statRows').textContent = rows.length.toLocaleString('ko-KR');
+    $('statCols').textContent = cols.length.toLocaleString('ko-KR');
+    renderPrivacy();
+    renderPreview();
+    renderTypeTable();
+    $('s2').hidden = false;
+    $('s3').hidden = false;
+    $('s4').hidden = false;
+    $('s5').hidden = true;      // 새 파일을 올리면 이전 집계표는 지움
+    $('s6').hidden = true;
+    $('s5v').hidden = true;
+    $('s5a').hidden = true;
+    aiReset();
+    verInvalidate();
+    reportBuilt = false; reportEdited = false;
+    $('report').innerHTML = '';
+    $('reportBox').hidden = true;
+    $('reportMsg').className = 'msg'; $('reportMsg').textContent = '';
+    $('reportStale').className = 'msg'; $('reportStale').textContent = '';
+    analyzed = false;
+    snap = null;
+    catOverride = {};
+    openGroups = {};
+    textView = [];
+    $('excludeBad').checked = false;
+    $('startNote').className = 'msg';
+    $('startNote').textContent = '';
+  }
+
+  /* ---------- 사람이 고칠 때 ---------- */
+  $('typeTable').addEventListener('change', function (e) {
+    var el = e.target;
+    if (!el.classList.contains('typesel')) return;
+    var k = Number(el.getAttribute('data-k'));
+    cols[k].type = el.value;
+    $('row' + k).className = rowClass(cols[k]);
+    $('reason' + k).innerHTML = reasonHtml(cols[k]);
+    renderPrivacy();
+    renderPreview();
+    markStale();
+  });
+  $('typeTable').addEventListener('input', function (e) {
+    var el = e.target;
+    if (!el.classList.contains('short')) return;
+    cols[Number(el.getAttribute('data-k'))].short = el.value;   // 입력 중에는 표를 다시 그리지 않음
+    markStale();
+  });
+
+  /* ---------- 파일 올리기 (끌어다 놓기 / 고르기) ---------- */
+  var drop = $('drop'), input = $('fileInput');
+
+  function takeFiles(list) {
+    if (!list || !list.length) return;
+    var note = list.length > 1 ? '파일이 ' + list.length + '개 올라왔어요. 한 번에 하나만 읽을 수 있어서 첫 번째 파일만 읽었습니다.' : '';
+    loadFile(list[0], note);
+  }
+
+  drop.addEventListener('click', function () { input.click(); });
+  drop.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+  });
+  input.addEventListener('change', function () {
+    takeFiles(input.files);
+    input.value = '';   // 같은 파일을 다시 골라도 읽히도록
+  });
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); });
+  });
+  drop.addEventListener('drop', function (e) { takeFiles(e.dataTransfer && e.dataTransfer.files); });
+  // 칸 밖에 떨어뜨려도 브라우저가 파일을 열어 버리지 않게 막기
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) { e.preventDefault(); });
+
+  /* ---------- 숫자 계산과 표시 ---------- */
+  // 분수(num/den)를 소수 d자리까지 사사오입(엑셀 ROUND와 같은 방식)으로 글자로 만든다.
+  // 정수끼리만 계산하므로 1.005 같은 값도 오차 없이 맞게 올림된다. (toFixed는 쓰지 않음)
+  function fmtFrac(num, den, d) {
+    var p = Math.pow(10, d);
+    var a = 2 * num * p + den, b = 2 * den;
+    var q = (a - (a % b)) / b;
+    var s = String(q);
+    if (d === 0) return s;
+    while (s.length < d + 1) s = '0' + s;
+    return s.slice(0, s.length - d) + '.' + s.slice(s.length - d);
+  }
+  function pct(count, n) { return fmtFrac(count * 100, n, 1) + '%'; }   // 비율 = 건수 ÷ n
+
+  var VALID_SCORE = /^[1-5](\.0+)?$/;   // 1~5점으로 인정하는 값 (4 또는 4.0)
+
+  // 5점 척도 열 하나 집계: 1~5 정수만 계산에 넣고, 빈칸은 빼고, 그 밖의 값은 따로 센다.
+  // idxs = 계산에 쓸 응답(행) 번호 목록
+  function tallyScale(c, idxs) {
+    var counts = [0, 0, 0, 0, 0], sum = 0, n = 0, invalid = {}, invalidTotal = 0, k, v;
+    for (k = 0; k < idxs.length; k++) {
+      v = rows[idxs[k]][c.idx];
+      if (v === '') continue;                          // 빈칸: 계산에서 뺌 (0점 아님)
+      if (VALID_SCORE.test(v)) {
+        var score = parseInt(v, 10);
+        counts[score - 1]++;
+        sum += score;
+        n++;
+      } else {
+        var mk = maskPII(v).t;
+        invalid[mk] = (invalid[mk] || 0) + 1;
+        invalidTotal++;
+      }
+    }
+    return { counts: counts, sum: sum, n: n, invalid: invalid, invalidTotal: invalidTotal };
+  }
+
+  function sortedList(map) {
+    var list = Array.from(map.entries());
+    list.sort(function (a, b) { return b[1] - a[1]; });   // 많은 순 (같으면 먼저 나온 순)
+    return list;
+  }
+
+  // 단일 선택: 빈칸 뺀 답을 보기별로 센다. n = 답한 사람 수
+  function tallySingle(c, idxs) {
+    var map = new Map(), n = 0;
+    idxs.forEach(function (i) {
+      var v = rows[i][c.idx];
+      if (v === '') return;
+      v = maskPII(v).t;
+      n++;
+      map.set(v, (map.get(v) || 0) + 1);
+    });
+    return { n: n, list: sortedList(map) };
+  }
+
+  // 복수 선택: 한 칸의 답을 쉼표로 나눠 보기별로 센다. 한 사람이 같은 보기를 두 번 적어도 1번만 센다.
+  function tallyMulti(c, idxs) {
+    var map = new Map(), n = 0, total = 0;
+    idxs.forEach(function (i) {
+      var v = rows[i][c.idx];
+      if (v === '') return;
+      v = maskPII(v).t;
+      var seen = new Set(), items = [];
+      v.split(/[,，]/).forEach(function (s) {
+        s = s.trim();
+        if (s && !seen.has(s)) { seen.add(s); items.push(s); }
+      });
+      if (!items.length) return;
+      n++;
+      items.forEach(function (s) { map.set(s, (map.get(s) || 0) + 1); total++; });
+    });
+    return { n: n, total: total, list: sortedList(map) };
+  }
+
+  // 불성실 의심 응답: 모든 5점 척도 문항에 1~5점으로 답했고, 점수가 전부 같은 응답
+  function findStraight(scaleCols) {
+    var out = [], i, k, v, first, same, s;
+    if (scaleCols.length < 3) return out;
+    for (i = 0; i < rows.length; i++) {
+      first = null; same = true;
+      for (k = 0; k < scaleCols.length; k++) {
+        v = rows[i][scaleCols[k].idx];
+        if (!VALID_SCORE.test(v)) { same = false; break; }   // 빈칸·1~5가 아닌 값이 있으면 판단하지 않음
+        s = parseInt(v, 10);
+        if (first === null) first = s; else if (s !== first) { same = false; break; }
+      }
+      if (same) out.push({ i: i, row: rowNums[i], score: first });
+    }
+    return out;
+  }
+
+  function markStale() {
+    verInvalidate();
+    if (!analyzed) return;
+    $('staleMsg').className = 'msg warn';
+    $('staleMsg').textContent = '문항 종류나 이름을 바꿨어요. 아래 표는 바꾸기 전 내용입니다. "분석 시작"을 다시 눌러 표를 새로 만드세요.';
+  }
+
+  function cut(s, k) { return s.length > k ? s.slice(0, k) + '…' : s; }
+  function colSnap(c) { return { idx: c.idx, title: c.title, name: c.short.trim() !== '' ? c.short.trim() : c.title }; }
+
+  /* ---------- 4단계: 요약 카드 ---------- */
+  function basisText(b) {
+    return b.useBad
+      ? '응답 ' + b.used + '건 기준 (불성실 의심 응답 ' + b.bad + '건 제외)'
+      : '응답 ' + b.used + '건 기준';
+  }
+
+  // 평균 비교: 합계/n 끼리 곱셈으로 비교해서 소수 오차 없이 정확하게 (양수면 a가 더 높음)
+  function cmpMean(a, b) { return a.sum * b.n - b.sum * a.n; }
+
+  function namesWithTies(list, first) {
+    var names = list.map(function (s) { return s.name; });
+    return names.length > 1 ? names[0] + ' 외 ' + (names.length - 1) + '개 (평균이 같음)' : names[0];
+  }
+
+  function renderSummary(b, stats) {
+    var cards = [];
+    cards.push({
+      label: '응답자 수', value: b.used + '명',
+      sub: b.useBad ? '전체 ' + b.total + '명 중 불성실 의심 응답 ' + b.bad + '명을 뺀 수' : '전체 응답을 모두 포함'
+    });
+
+    var withN = stats.filter(function (s) { return s.n > 0; });
+
+    // 전반적 이용 만족도(100점 환산)
+    var ov = [];
+    stats.forEach(function (s) { if (/전반|종합/.test(s.title + ' ' + s.name) && /만족/.test(s.title + ' ' + s.name)) ov.push(s); });
+    if (!stats.length) {
+      cards.push({ label: '전반적 이용 만족도 (100점 환산)', value: '-', sub: '5점 척도 문항이 없어요' });
+    } else if (ov.length) {
+      var o = ov[0];
+      cards.push({
+        label: '전반적 이용 만족도 (100점 환산)',
+        value: o.n > 0 ? fmtFrac(o.sum * 20, o.n, 1) + '점' : '-',
+        sub: o.n > 0
+          ? '문항: ' + o.name + ' · 평균 ' + fmtFrac(o.sum, o.n, 2) + ' / 5점 · n=' + o.n + (ov.length > 1 ? ' (비슷한 문항이 ' + ov.length + '개라 첫 번째를 썼어요)' : '')
+          : '문항: ' + o.name + ' · 답한 사람이 없어요'
+      });
+    } else {
+      var ts = 0, tn = 0;
+      stats.forEach(function (s) { ts += s.sum; tn += s.n; });
+      cards.push({
+        label: '전반적 이용 만족도 (100점 환산)',
+        value: tn > 0 ? fmtFrac(ts * 20, tn, 1) + '점' : '-',
+        sub: '"전반적 만족도" 문항을 찾지 못해, 5점 척도 ' + stats.length + '개 문항의 모든 응답을 합쳐 계산했어요 (평균 ' + (tn > 0 ? fmtFrac(ts, tn, 2) : '-') + ' / 5점, 응답 ' + tn + '개)'
+      });
+    }
+
+    // 평균이 가장 높은 / 낮은 문항
+    function pick(dir) {
+      if (!withN.length) return null;
+      var best = [withN[0]], i, c;
+      for (i = 1; i < withN.length; i++) {
+        c = cmpMean(withN[i], best[0]) * dir;
+        if (c > 0) best = [withN[i]]; else if (c === 0) best.push(withN[i]);
+      }
+      return best;
+    }
+    [['평균이 가장 높은 문항', 1], ['평균이 가장 낮은 문항', -1]].forEach(function (d) {
+      var best = pick(d[1]);
+      if (!best) {
+        cards.push({ label: d[0], value: '-', sub: stats.length ? '답한 사람이 있는 5점 척도 문항이 없어요' : '5점 척도 문항이 없어요', text: true });
+      } else {
+        var s = best[0];
+        cards.push({
+          label: d[0], text: true, value: namesWithTies(best),
+          sub: '평균 ' + fmtFrac(s.sum, s.n, 2) + ' / 5점 · 100점 환산 ' + fmtFrac(s.sum * 20, s.n, 1) + '점'
+        });
+      }
+    });
+
+    $('summaryCards').innerHTML = cards.map(function (c) {
+      return '<div class="scard"><span class="sl">' + esc(c.label) + '</span><b class="sv' + (c.text ? ' text' : '') + '">' + esc(c.value) + '</b><span class="ss">' + esc(c.sub) + '</span></div>';
+    }).join('');
+  }
+
+  /* ---------- 4단계: SVG 그래프 (외부 라이브러리 없음) ---------- */
+  var FONT_ATTR = "'Malgun Gothic','맑은 고딕','Apple SD Gothic Neo','Noto Sans KR',sans-serif";
+  var INK = '#1d2433', MUTED = '#5b6578', GRID = '#d6dce6', AXIS = '#8a94a6', NAVY = '#243f7a';
+  // 1~5점 색: 낮은 점수는 연한 남색, 높은 점수는 진한 남색
+  var RAMP = ['#c9d5ea', '#9fb4d9', '#6f8cc2', '#3f5f9e', '#1a3668'];
+  var RAMP_INK = [INK, INK, INK, '#ffffff', '#ffffff'];
+  var graphFigs = [];
+
+  function r1(v) { return Math.round(v * 10) / 10; }   // 그림 좌표용 (화면에 보이는 통계 숫자가 아님)
+  function tw(s, fs) {                                  // 글자 폭 어림 계산 (한글은 글자 크기만큼)
+    var w = 0, i;
+    for (i = 0; i < s.length; i++) w += s.charCodeAt(i) > 127 ? fs : fs * 0.58;
+    return w;
+  }
+  function wrap(s, maxW, fs) {   // 띄어쓰기에서 줄을 바꾸고, 글자는 줄이지 않음
+    var words = s.split(/\s+/).filter(function (w) { return w !== ''; }), lines = [], cur = '';
+    words.forEach(function (w) {
+      var cand = cur ? cur + ' ' + w : w;
+      if (tw(cand, fs) <= maxW) { cur = cand; return; }
+      if (cur) { lines.push(cur); cur = ''; }
+      if (tw(w, fs) <= maxW) { cur = w; return; }
+      var piece = '', i, ch;                  // 낱말 하나가 줄보다 길 때만 글자 단위로 나눔
+      for (i = 0; i < w.length; i++) {
+        ch = w.charAt(i);
+        if (piece !== '' && tw(piece + ch, fs) > maxW) { lines.push(piece); piece = ch; } else { piece += ch; }
+      }
+      cur = piece;
+    });
+    if (cur !== '') lines.push(cur);
+    return lines.length ? lines : [''];
+  }
+  function svgOpen(W, H, label) {
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H +
+      '" role="img" aria-label="' + esc(label) + '" font-family="' + FONT_ATTR + '"><rect width="' + W + '" height="' + H + '" fill="#ffffff"/>';
+  }
+  function T(x, y, str, fs, fill, anchor, bold) {
+    return '<text x="' + r1(x) + '" y="' + r1(y) + '" font-size="' + fs + '" fill="' + fill + '"' +
+      (anchor ? ' text-anchor="' + anchor + '"' : '') + (bold ? ' font-weight="700"' : '') + '>' + esc(str) + '</text>';
+  }
+  function LN(x1, y1, x2, y2, color) {
+    return '<line x1="' + r1(x1) + '" y1="' + r1(y1) + '" x2="' + r1(x2) + '" y2="' + r1(y2) + '" stroke="' + color + '" stroke-width="1"/>';
+  }
+  function labelBlock(x, cy, lines, fs, fill, anchor) {
+    var lh = fs + 3, y0 = cy - (lines.length - 1) * lh / 2 + fs * 0.35, out = '';
+    lines.forEach(function (l, k) { out += T(x, y0 + k * lh, l, fs, fill, anchor); });
+    return out;
+  }
+  // 오른쪽 끝만 4px 둥근 가로 막대 (왼쪽 기준선은 반듯하게)
+  function barRight(x, y, w, h, fill) {
+    if (w < 8) return '<rect x="' + r1(x) + '" y="' + r1(y) + '" width="' + r1(Math.max(w, 1)) + '" height="' + h + '" fill="' + fill + '"/>';
+    return '<path d="M' + r1(x) + ' ' + r1(y) + ' H' + r1(x + w - 4) + ' Q' + r1(x + w) + ' ' + r1(y) + ' ' + r1(x + w) + ' ' + r1(y + 4) +
+      ' V' + r1(y + h - 4) + ' Q' + r1(x + w) + ' ' + r1(y + h) + ' ' + r1(x + w - 4) + ' ' + r1(y + h) + ' H' + r1(x) + ' Z" fill="' + fill + '"/>';
+  }
+  // 위쪽 끝만 4px 둥근 세로 막대 (아래 기준선은 반듯하게)
+  function barTop(x, yt, w, h, fill) {
+    if (h < 8) return '<rect x="' + r1(x) + '" y="' + r1(yt) + '" width="' + r1(w) + '" height="' + r1(h) + '" fill="' + fill + '"/>';
+    var yb = yt + h;
+    return '<path d="M' + r1(x) + ' ' + r1(yb) + ' V' + r1(yt + 4) + ' Q' + r1(x) + ' ' + r1(yt) + ' ' + r1(x + 4) + ' ' + r1(yt) +
+      ' H' + r1(x + w - 4) + ' Q' + r1(x + w) + ' ' + r1(yt) + ' ' + r1(x + w) + ' ' + r1(yt + 4) + ' V' + r1(yb) + ' Z" fill="' + fill + '"/>';
+  }
+  function header(W, title, subs) {
+    // 제목과 설명은 줄여 쓰지 않고, 길면 여러 줄로 나눠서 모두 보여 준다.
+    var out = '', y = 30;
+    wrap(title, W - 48, 16).forEach(function (l, i) { out += T(24, 30 + i * 22, l, 16, INK, null, true); y = 30 + i * 22; });
+    subs.forEach(function (sub) {
+      wrap(sub, W - 48, 12).forEach(function (l) { y += 18; out += T(24, y, l, 12, MUTED); });
+    });
+    return { svg: out, bottom: y };
+  }
+  function footLines(W, texts) {
+    var all = [];
+    texts.forEach(function (t) { wrap(t, W - 48, 11).forEach(function (l) { all.push(l); }); });
+    return all;
+  }
+  function footDraw(H, lines) {
+    var out = '';
+    lines.forEach(function (l, k) { out += T(24, H - 10 - (lines.length - 1 - k) * 15, l, 11, MUTED); });
+    return out;
+  }
+  function maxOf(a) { return a.reduce(function (m, x) { return Math.max(m, x); }, 0); }
+
+  // 그림 1: 5점 척도 문항별 평균 (세로 막대, 세로축 1~5 고정)
+  function figMean(stats, basis) {
+    var n = stats.length, left = 64, right = 24, plotH = 250, v, y, s;
+    var W = Math.max(600, left + right + 100 * n), slot = (W - left - right) / n;
+    var title = '그림 1. 5점 척도 문항별 평균';
+    var hd = header(W, title, ['세로축은 1~5점으로 고정했고, 막대 위 숫자는 평균입니다.']);
+    var top = hd.bottom + 36;
+    var labs = stats.map(function (st) { return wrap(st.name, slot - 14, 12); });
+    var labelH = 14 + maxOf(labs.map(function (l) { return l.length; })) * 15 + 10;
+    var fl = footLines(W, [basisText(basis) + ' · 빈칸과 1~5점이 아닌 값은 계산에서 뺐습니다.']);
+    var H = top + plotH + labelH + fl.length * 15 + 16;
+    s = svgOpen(W, H, title) + hd.svg;
+    for (v = 1; v <= 5; v++) {
+      y = top + plotH * (5 - v) / 4;
+      s += LN(left, y, W - right, y, v === 1 ? AXIS : GRID) + T(left - 8, y + 4, String(v), 12, MUTED, 'end');
+    }
+    s += '<text transform="translate(18 ' + r1(top + plotH / 2) + ') rotate(-90)" font-size="12" fill="' + MUTED + '" text-anchor="middle">평균 (점)</text>';
+    stats.forEach(function (st, i) {
+      var cx = left + slot * (i + 0.5), bw = Math.min(24, slot * 0.4), yb = top + plotH, g = '';
+      if (st.n > 0) {
+        var mean = st.sum / st.n;                       // 막대 높이용 (그리는 데만 사용)
+        var yt = top + plotH * (5 - mean) / 4;
+        if (yb - yt > 0) g += barTop(cx - bw / 2, yt, bw, yb - yt, NAVY);
+        g += T(cx, yt - 7, fmtFrac(st.sum, st.n, 2), 13, INK, 'middle', true);
+      } else {
+        g += T(cx, yb - 7, '-', 13, MUTED, 'middle');
+      }
+      labs[i].forEach(function (l, k) { g += T(cx, yb + 22 + k * 15, l, 12, INK, 'middle'); });
+      s += '<g><title>' + esc(st.name + ': ' + (st.n > 0 ? '평균 ' + fmtFrac(st.sum, st.n, 2) + ' (n=' + st.n + ')' : '답한 사람이 없어요')) + '</title>' + g + '</g>';
+    });
+    s += footDraw(H, fl) + '</svg>';
+    return { svg: s, w: W, h: H, label: '그림 1', file: '그림1_문항별평균.png' };
+  }
+
+  // 그림 2: 문항별 1~5점 응답 분포 (100% 누적 가로 막대)
+  function figDist(stats, basis) {
+    var left = 240, plotW = 500, right = 76, W = left + plotW + right, k, p;
+    var title = '그림 2. 문항별 1~5점 응답 분포';
+    var hd = header(W, title, ['막대 전체가 100%이고, 칸 안의 숫자는 각 점수를 고른 사람의 비율입니다.']);
+    var legendBase = hd.bottom + 28, top = legendBase + 22;
+    var labs = stats.map(function (st) { return wrap(st.name, left - 26, 12); });
+    var rowHs = labs.map(function (l) { return Math.max(46, l.length * 15 + 16); });
+    var rowTops = [], acc = 0;
+    rowHs.forEach(function (h) { rowTops.push(acc); acc += h; });
+    var fl = footLines(W, [basisText(basis) + ' · 비율이 작아 칸이 좁으면 숫자를 생략했습니다. 정확한 값은 집계표를 보세요.']);
+    var H = top + acc + 34 + fl.length * 15 + 12, s;
+    s = svgOpen(W, H, title) + hd.svg;
+    for (k = 0; k < 5; k++) {
+      s += '<rect x="' + (left + k * 72) + '" y="' + (legendBase - 11) + '" width="12" height="12" rx="2" fill="' + RAMP[k] + '"/>' + T(left + k * 72 + 18, legendBase, (k + 1) + '점', 12, MUTED);
+    }
+    for (p = 0; p <= 100; p += 25) {
+      var gx = left + plotW * p / 100;
+      s += LN(gx, top - 6, gx, top + acc, GRID) + T(gx, top + acc + 18, p + '%', 12, MUTED, 'middle');
+    }
+    stats.forEach(function (st, i) {
+      var cy = top + rowTops[i] + rowHs[i] / 2, by = cy - 11, bh = 22, g = '';
+      g += labelBlock(left - 12, cy, labs[i], 12, INK, 'end');
+      if (st.n > 0) {
+        var cid = 'cp' + i, R = left + plotW;
+        g += '<clipPath id="' + cid + '"><path d="M' + left + ' ' + r1(by) + ' H' + (R - 4) + ' Q' + R + ' ' + r1(by) + ' ' + R + ' ' + r1(by + 4) +
+          ' V' + r1(by + bh - 4) + ' Q' + R + ' ' + r1(by + bh) + ' ' + (R - 4) + ' ' + r1(by + bh) + ' H' + left + ' Z"/></clipPath><g clip-path="url(#' + cid + ')">';
+        var cum = 0;
+        st.counts.forEach(function (c, kk) {
+          if (!c) return;
+          var x0 = left + plotW * cum / st.n, x1 = left + plotW * (cum + c) / st.n;
+          cum += c;
+          var w = Math.max((x1 - x0) - (cum === st.n ? 0 : 2), 1);   // 칸 사이 2px 흰 틈
+          var lab = pct(c, st.n);
+          g += '<g><title>' + esc(st.name + ' · ' + (kk + 1) + '점: ' + c + '건 (' + lab + ')') + '</title><rect x="' + r1(x0) + '" y="' + r1(by) + '" width="' + r1(w) + '" height="' + bh + '" fill="' + RAMP[kk] + '"/>';
+          if (w >= tw(lab, 11) + 10) g += T(x0 + w / 2, by + bh / 2 + 4, lab, 11, RAMP_INK[kk], 'middle');
+          g += '</g>';
+        });
+        g += '</g>' + T(R + 10, cy + 4, 'n=' + st.n, 12, MUTED);
+      } else {
+        g += T(left + 8, cy + 4, '답한 사람이 없어요', 12, MUTED);
+      }
+      s += g;
+    });
+    s += footDraw(H, fl) + '</svg>';
+    return { svg: s, w: W, h: H, label: '그림 2', file: '그림2_문항별응답분포.png' };
+  }
+
+  // 그림 3: 선택형 문항 하나의 보기별 막대 (가로, 0~100%)
+  function safeName(s) {
+    var x = s.replace(/[\\\/:*?"<>|\r\n\t]/g, '').replace(/\s+/g, '').slice(0, 60).replace(/\.+$/, '');
+    return x === '' ? '문항' : x;
+  }
+  // 가로 막대 그림 공통 (선택형 보기, 서술형 의견 분야에 함께 씀)
+  function figBars(o) {   // o: label, title, subs, list([이름, 건수]), n, basis, foots, maxOpt, file
+    var shown = o.list.slice(0, o.maxOpt), more = o.list.length - shown.length;
+    var left = 250, plotW = 410, right = 140, W = left + plotW + right, p;
+    var hd = header(W, o.title, o.subs), top = hd.bottom + 26;
+    var labs = shown.map(function (e) { return wrap(e[0], left - 26, 12); });
+    var rowHs = labs.map(function (l) { return Math.max(36, l.length * 15 + 14); });
+    var rowTops = [], acc = 0;
+    rowHs.forEach(function (h) { rowTops.push(acc); acc += h; });
+    var foots = o.foots.slice();
+    foots[0] = basisText(o.basis) + ' · ' + foots[0];
+    if (more > 0) foots.unshift('※ 건수가 많은 ' + o.maxOpt + '개만 그렸습니다. 전체 ' + o.list.length + '개는 집계표를 보세요.');
+    var fl = footLines(W, foots);
+    var H = top + acc + 34 + fl.length * 15 + 12, s;
+    s = svgOpen(W, H, o.title) + hd.svg;
+    for (p = 0; p <= 100; p += 25) {
+      var gx = left + plotW * p / 100;
+      s += LN(gx, top - 6, gx, top + acc, p === 0 ? AXIS : GRID) + T(gx, top + acc + 18, p + '%', 12, MUTED, 'middle');
+    }
+    shown.forEach(function (e, i) {
+      var cy = top + rowTops[i] + rowHs[i] / 2, len = o.n > 0 ? plotW * e[1] / o.n : 0, lab = pct(e[1], o.n) + ' (' + e[1] + '건)';
+      s += '<g><title>' + esc(e[0] + ': ' + lab) + '</title>' + labelBlock(left - 12, cy, labs[i], 12, INK, 'end') +
+        (len > 0 ? barRight(left, cy - 9, len, 18, NAVY) : '') + T(left + len + 8, cy + 4, lab, 12, INK) + '</g>';
+    });
+    s += footDraw(H, fl) + '</svg>';
+    return { svg: s, w: W, h: H, label: o.label, file: o.file };
+  }
+  function figChoice(label, name, typeName, t, basis, isMulti) {
+    var subs = [typeName + ' · 답한 사람 ' + t.n + '명' + (isMulti ? ' · 총 선택 ' + t.total + '개' : '')];
+    if (isMulti) subs.push('복수 선택이라 비율을 모두 더하면 100%를 넘을 수 있습니다.');
+    return figBars({
+      label: label, title: label + '. ' + name, subs: subs, list: t.list, n: t.n, basis: basis,
+      foots: ['비율 = 건수 ÷ 답한 사람 수'], maxOpt: 15, file: label.replace(/\s/g, '') + '_' + safeName(name) + '.png'
+    });
+  }
+  // 그림 4: 서술형 의견의 분야별 건수
+  function figText(label, v, basis) {
+    var N = v.items.length, name = v.c.name;
+    return figBars({
+      label: label, title: label + '. ' + name + ' · 서술형 의견의 분야',
+      subs: ['서술형 의견 ' + N + '건 · 응답률 ' + fmtFrac(N * 100, v.M, 1) + '% (전체 응답자 ' + v.M + '명 중 ' + N + '명)',
+             '분야는 키워드로 자동 분류한 뒤 사람이 고친 결과입니다.'],
+      list: catList(v).map(function (e) { return [e[0], e[1]]; }), n: N, basis: basis,
+      foots: ['비율 = 건수 ÷ 서술형 응답 수'], maxOpt: 10, file: label.replace(/\s/g, '') + '_' + safeName(name) + '_의견분야.png'
+    });
+  }
+
+  function renderGraphs(idxs, basis, stats) {
+    var figs = [];
+    if (stats.length) { figs.push(figMean(stats, basis)); figs.push(figDist(stats, basis)); }
+    var total = snap.single.length + snap.multi.length, k = 0;
+    snap.single.forEach(function (c) {
+      k++;
+      figs.push(figChoice(total === 1 ? '그림 3' : '그림 3-' + k, c.name, '단일 선택', tallySingle(c, idxs), basis, false));
+    });
+    snap.multi.forEach(function (c) {
+      k++;
+      figs.push(figChoice(total === 1 ? '그림 3' : '그림 3-' + k, c.name, '복수 선택', tallyMulti(c, idxs), basis, true));
+    });
+    var tn = textView.filter(function (v) { return v.items.length > 0; }).length, tk = 0;
+    textView.forEach(function (v) {
+      if (!v.items.length) return;
+      tk++;
+      figs.push(figText(tn === 1 ? '그림 4' : '그림 4-' + tk, v, basis));
+    });
+    graphFigs = figs;
+    $('graphArea').innerHTML = figs.map(function (f, i) {
+      return '<figure class="fig"><div class="figbar"><div><span class="figcap">' + esc(f.label) + '</span> <span class="figfile">저장 이름: ' + esc(f.file) + '</span></div>' +
+        '<button type="button" class="btn small" data-fig="' + i + '">그림 저장(PNG)</button></div>' +
+        '<div class="svgwrap">' + f.svg + '</div></figure>';
+    }).join('');
+    $('figMsg').className = 'msg';
+    $('figMsg').textContent = '';
+  }
+
+  // 그림을 PNG 파일로 저장 (이 컴퓨터 안에서만 만들어 내려받음)
+  function savePng(f) {
+    var img = new Image(), msg = $('figMsg');
+    function fail() {
+      msg.className = 'msg error';
+      msg.textContent = '그림을 저장하지 못했어요. 크롬을 최신 버전으로 바꾼 뒤 다시 눌러 보세요. 계속 안 되면 그림을 화면 캡처(Windows 키 + Shift + S)로 저장해 주세요.';
+    }
+    img.onload = function () {
+      try {
+        var scale = 2, cv = document.createElement('canvas');
+        cv.width = f.w * scale; cv.height = f.h * scale;
+        var ctx = cv.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.drawImage(img, 0, 0, cv.width, cv.height);
+        cv.toBlob(function (blob) {
+          if (!blob) { fail(); return; }
+          var a = document.createElement('a'), u = URL.createObjectURL(blob);
+          a.href = u; a.download = f.file;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(function () { URL.revokeObjectURL(u); }, 3000);
+          msg.className = 'msg ok';
+          msg.textContent = '"' + f.file + '" 파일을 내려받았어요. 크롬의 다운로드 폴더를 확인해 주세요.';
+        }, 'image/png');
+      } catch (e) { fail(); }
+    };
+    img.onerror = fail;
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(f.svg);
+  }
+  $('graphArea').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('button[data-fig]') : null;
+    if (b) savePng(graphFigs[Number(b.getAttribute('data-fig'))]);
+  });
+
+  /* ---------- 5단계: 서술형 의견 정리 ---------- */
+  // 전화번호·이메일 모양은 화면에 보이기 전에 [가림]으로 바꾼다.
+  var MASK = '[가림]';
+  var EMAIL_RE = /[^\s@,;:()<>\[\]"']+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+/g;
+  var SEP = '[\\s.\\-\\u2010-\\u2015\\uFF0D]{0,3}';
+  var PHONE_RE = new RegExp(
+    '(?<!\\d)\\(?(?:(?:\\+82|82)' + SEP + '\\(?0?\\)?' + SEP + '1[016789]|01[016789])\\)?' + SEP + '\\d{3,4}' + SEP + '\\d{4}(?!\\d)' +   // 휴대폰: 010-1234-5678, 01012345678, +82 10-1234-5678
+    '|(?<!\\d)\\(?0(?:2|[3-6]\\d|70)\\)?' + SEP + '\\d{3,4}' + SEP + '\\d{4}(?!\\d)', 'g');                                              // 일반 전화: 02-123-4567, 031-123-4567
+  function maskPII(s) {
+    var n = 0;
+    var t = s.replace(EMAIL_RE, function () { n++; return MASK; }).replace(PHONE_RE, function () { n++; return MASK; });
+    return { t: t, n: n };
+  }
+
+  // 의미 없는 답 (띄어쓰기·문장부호를 뺀 뒤 아래 낱말과 같으면 뺀다)
+  var MEANINGLESS = ['없음', '없습니다', '없어요', '없다', '없네요', '없었음', '없었습니다', '없었어요', '없고요', '없는데요',
+    '특별히없음', '특별히없습니다', '특별히없어요', '특별한의견없음', '특별한의견없습니다', '딱히없음', '딱히없습니다', '딱히없어요',
+    '해당없음', '해당사항없음', '해당사항없습니다', '의견없음', '의견없습니다', '의견은없습니다', '모름', '모르겠음', '모르겠습니다',
+    '모르겠어요', '무', '무응답', 'na', 'none', 'nothing', 'x'];
+  function isMeaningless(masked) {
+    var t = masked.split(MASK).join('').replace(/[\s\-_.,!?~·…'"“”‘’()\[\]{}\/\\:;*]+/g, '').toLowerCase();
+    return t === '' || MEANINGLESS.indexOf(t) >= 0;
+  }
+
+  // 분야와 키워드
+  var CAT_DEFS = [
+    { id: 'exh', name: '전시·해설' }, { id: 'fac', name: '시설·인프라' }, { id: 'edu', name: '교육·프로그램' },
+    { id: 'inf', name: '정보·접근성' }, { id: 'pra', name: '칭찬·기타' }
+  ];
+  var CAT_NAME = { exh: '전시·해설', fac: '시설·인프라', edu: '교육·프로그램', inf: '정보·접근성', pra: '칭찬·기타', none: '미분류' };
+  var ALL_CAT_IDS = ['exh', 'fac', 'edu', 'inf', 'pra', 'none'];
+  var TIE_ORDER = ['edu', 'inf', 'fac', 'exh', 'pra'];                   // 키워드 수가 같을 때의 순서
+  var REQUEST_WORDS = ['부족', '필요', '주세요', '좋겠', '불편', '아쉽'];   // 요청 표현
+  function defaultKw() {
+    return {
+      exh: ['설명', '해설', '도슨트', '용어', '어려', '작품', '영상', '글씨'],
+      fac: ['주차', '벤치', '의자', '휴게', '카페', '화장실', '엘리베이터', '덥', '춥', '좁', '시설'],
+      edu: ['프로그램', '체험', '교육', '강좌', '어린이', '아이', '가족', '행사'],
+      inf: ['예약', '홈페이지', '버스', '지하철', '교통', '안내판', '표지판', '홍보', '운영시간'],
+      pra: ['좋았', '친절', '감사', '만족', '최고', '추천', '유익']
+    };
+  }
+  var kw = defaultKw();
+  var catOverride = {};   // 사람이 바꾼 분야: '열번호:행번호' → 분야
+  var openGroups = {};    // 펼쳐 둔 의견 목록
+  var textView = [];      // 서술형 문항별 정리 결과
+  var lastCtx = null;
+
+  // 의견 하나를 분야로 나눈다. 키워드는 띄어쓰기로 나눈 낱말 안에서만 찾는다.
+  function classify(text) {
+    var words = text.toLowerCase().split(/\s+/).filter(function (w) { return w !== ''; });
+    function inWords(k) {
+      k = k.toLowerCase();
+      for (var i = 0; i < words.length; i++) { if (words[i].indexOf(k) >= 0) return true; }
+      return false;
+    }
+    var hits = {};
+    CAT_DEFS.forEach(function (c) { hits[c.id] = kw[c.id].filter(inWords); });
+    var reqHits = REQUEST_WORDS.filter(inWords);
+    var best = null, bn = 0;
+    TIE_ORDER.forEach(function (id) {
+      if (id === 'pra' && reqHits.length) return;       // 요청 표현이 있으면 칭찬·기타로 나누지 않음
+      var n = hits[id].length;
+      if (n > bn) { bn = n; best = id; }                  // 같으면 먼저 나온 분야 유지
+    });
+    return { cat: best || 'none', hits: hits, reqHits: reqHits };
+  }
+
+  function buildTextView(c, idxs) {
+    var items = [], blank = 0, masked = 0, dropped = new Map();
+    idxs.forEach(function (i) {
+      var raw = rows[i][c.idx];
+      if (raw === '') { blank++; return; }
+      var m = maskPII(raw);
+      masked += m.n;
+      if (isMeaningless(m.t)) { dropped.set(m.t, (dropped.get(m.t) || 0) + 1); return; }
+      items.push({ i: i, rowNum: rowNums[i], text: m.t, key: c.idx + ':' + i });
+    });
+    return { c: c, items: items, blank: blank, masked: masked, dropped: dropped, M: idxs.length };
+  }
+  function classifyAll(v) {
+    v.items.forEach(function (it) {
+      it.auto = classify(it.text);
+      it.over = Object.prototype.hasOwnProperty.call(catOverride, it.key);
+      it.cat = it.over ? catOverride[it.key] : it.auto.cat;
+    });
+  }
+  // 분야별 건수 (많은 순, 같으면 표의 순서대로)
+  function catList(v) {
+    var m = { exh: 0, fac: 0, edu: 0, inf: 0, pra: 0, none: 0 };
+    v.items.forEach(function (it) { m[it.cat]++; });
+    var list = ALL_CAT_IDS.map(function (id) { return [CAT_NAME[id], m[id], id]; });
+    list.sort(function (a, b) { return b[1] - a[1]; });
+    return list;
+  }
+
+  function whyText(it) {
+    var parts = [];
+    CAT_DEFS.forEach(function (c) { if (it.auto.hits[c.id].length) parts.push(c.name + ': ' + it.auto.hits[c.id].join(', ')); });
+    var s = parts.length ? '걸린 키워드 — ' + parts.join(' / ') : '걸린 키워드 없음';
+    if (it.auto.reqHits.length && it.auto.hits.pra.length) {
+      s += ' · 칭찬 낱말이 있지만 요청 표현(' + it.auto.reqHits.join(', ') + ')이 있어 칭찬·기타에서 뺐어요';
+    }
+    if (it.over) s += ' · 자동 분류는 "' + CAT_NAME[it.auto.cat] + '"였어요';
+    return s;
+  }
+  function itemHtml(it) {
+    var sel = '<select class="catsel" data-key="' + it.key + '" aria-label="엑셀 ' + it.rowNum + '행 의견의 분야">' +
+      ALL_CAT_IDS.map(function (id) { return '<option value="' + id + '"' + (id === it.cat ? ' selected' : '') + '>' + esc(CAT_NAME[id]) + '</option>'; }).join('') + '</select>';
+    return '<li class="titem"><div class="ttext">' + esc(it.text) + '</div><div class="tfoot"><span>엑셀 ' + it.rowNum + '행</span>' + sel +
+      (it.over ? '<span class="tag">직접 고침</span><button type="button" class="linkbtn" data-reset="' + it.key + '">자동 분류로 되돌리기</button>' : '') +
+      '<span>' + esc(whyText(it)) + '</span></div></li>';
+  }
+
+  function renderTextCols() {
+    $('textBlock').hidden = !textView.length;
+    $('textCols').innerHTML = textView.map(function (v) {
+      var N = v.items.length, dropTotal = 0, ex = [];
+      v.dropped.forEach(function (n, t) { dropTotal += n; ex.push([t, n]); });
+      ex.sort(function (a, b) { return b[1] - a[1]; });
+      var h = '<div class="tcard"><h4>' + esc(v.c.name) + '</h4>' +
+        '<p class="tstats"><b>서술형 응답 ' + N + '건</b> · 응답률 ' + fmtFrac(N * 100, v.M, 1) + '% (전체 응답자 ' + v.M + '명 중 ' + N + '명)</p>' +
+        '<p class="tmeta">빼 둔 답: 빈 답 ' + v.blank + '건, 의미 없는 답 ' + dropTotal + '건' +
+        (ex.length ? ' (' + ex.slice(0, 6).map(function (e) { return '"' + esc(cut(e[0], 20)) + '" ' + e[1] + '건'; }).join(', ') + (ex.length > 6 ? ' 외' : '') + ')' : '') +
+        ' · 전화번호·이메일을 가린 곳: ' + v.masked + '곳</p>';
+      if (!N) return h + '<p>의미 있는 서술형 답이 없어요. 문항 종류를 다시 확인해 주세요.</p></div>';
+      var sum = 0;
+      h += '<div class="scroll"><table><thead><tr><th>분야</th><th class="rn">건수</th><th class="rn">비율</th></tr></thead><tbody>';
+      catList(v).forEach(function (e) {
+        sum += e[1];
+        h += '<tr><td>' + esc(e[0]) + '</td><td class="rn">' + e[1] + '</td><td class="rn">' + pct(e[1], N) + '</td></tr>';
+      });
+      h += '<tr class="sum"><td>합계</td><td class="rn">' + sum + '</td><td class="rn">' + pct(sum, N) + '</td></tr></tbody></table></div>' +
+        '<p class="tmeta" style="margin-top:6px">비율 = 건수 ÷ 서술형 응답 수 (의견 하나는 한 분야에만 들어갑니다)</p>' +
+        '<h5 class="tsub">분야별 의견 목록 <span class="tmeta">분야 이름을 눌러 펼치고, 의견마다 분야를 바꿀 수 있어요</span></h5>';
+      ALL_CAT_IDS.forEach(function (id) {
+        var its = v.items.filter(function (it) { return it.cat === id; });
+        if (!its.length) return;
+        var key = v.c.idx + ':' + id;
+        h += '<details class="tgroup" data-gkey="' + key + '"' + (openGroups[key] ? ' open' : '') + '><summary>' + esc(CAT_NAME[id]) + ' (' + its.length + '건)</summary><ul>' +
+          its.map(itemHtml).join('') + '</ul></details>';
+      });
+      return h + '</div>';
+    }).join('');
+  }
+
+  function buildText(idxs) {
+    textView = snap.text.map(function (c) { return buildTextView(c, idxs); });
+    textView.forEach(classifyAll);
+    renderTextCols();
+    $('textMsg').className = 'msg';
+    $('textMsg').textContent = '';
+  }
+  // 분야나 키워드가 바뀌면 의견을 다시 분류하고 표와 그림을 다시 만든다.
+  function refreshText(msg) {
+    if (!snap || !lastCtx) return;
+    textView.forEach(classifyAll);
+    renderTextCols();
+    renderGraphs(lastCtx.idxs, lastCtx.basis, lastCtx.stats);
+    if (msg) { $('textMsg').className = 'msg ok'; $('textMsg').textContent = msg; }
+    markReportStale();
+    aiRefreshValues();
+    verInvalidate();
+  }
+  function findItem(key) {
+    for (var a = 0; a < textView.length; a++) {
+      for (var b = 0; b < textView[a].items.length; b++) { if (textView[a].items[b].key === key) return textView[a].items[b]; }
+    }
+    return null;
+  }
+
+  $('textCols').addEventListener('change', function (e) {
+    var el = e.target;
+    if (!el.classList || !el.classList.contains('catsel')) return;
+    var key = el.getAttribute('data-key'), it = findItem(key);
+    if (!it) return;
+    var from = it.cat, to = el.value;
+    if (to === it.auto.cat) delete catOverride[key]; else catOverride[key] = to;
+    refreshText('엑셀 ' + it.rowNum + '행 의견을 "' + CAT_NAME[from] + '"에서 "' + CAT_NAME[to] + '"(으)로 옮겼어요. 위의 표와 그림에 반영했습니다.');
+  });
+  $('textCols').addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-reset]') : null;
+    if (!b) return;
+    var key = b.getAttribute('data-reset'), it = findItem(key);
+    delete catOverride[key];
+    refreshText(it ? '엑셀 ' + it.rowNum + '행 의견을 자동 분류로 되돌렸어요.' : '');
+  });
+  $('textCols').addEventListener('toggle', function (e) {   // 펼쳐 둔 목록은 다시 그려도 그대로 유지
+    var d = e.target;
+    if (d.getAttribute && d.getAttribute('data-gkey')) openGroups[d.getAttribute('data-gkey')] = d.open;
+  }, true);
+
+  /* ----- 키워드 더하고 빼기 ----- */
+  function kwMsg(kind, text) { var m = $('kwMsg'); m.className = 'msg ' + kind; m.textContent = text; }
+  function renderKwEditor() {
+    $('kwEditor').innerHTML = CAT_DEFS.map(function (c) {
+      return '<div class="kwrow"><b>' + esc(c.name) + '</b>' +
+        kw[c.id].map(function (k) {
+          return '<span class="chip">' + esc(k) + '<button type="button" data-del="' + c.id + '" data-kw="' + esc(k) + '" aria-label="' + esc(c.name) + '에서 ' + esc(k) + ' 빼기">×</button></span>';
+        }).join('') +
+        '<input type="text" class="kwin" data-cat="' + c.id + '" placeholder="키워드 더하기" aria-label="' + esc(c.name) + ' 키워드 더하기">' +
+        '<button type="button" class="btn small" data-add="' + c.id + '">더하기</button></div>';
+    }).join('');
+  }
+  function afterKwChange(msg) {
+    renderKwEditor();
+    var kept = 0;
+    textView.forEach(function (v) { v.items.forEach(function (it) { if (Object.prototype.hasOwnProperty.call(catOverride, it.key)) kept++; }); });
+    refreshText('키워드를 바꿔서 의견을 다시 분류했어요.' + (kept ? ' 직접 고친 분야 ' + kept + '건은 그대로 두었습니다.' : ''));
+    kwMsg('ok', msg);
+  }
+  function addKeywords(cat, raw) {
+    var parts = raw.split(/[,，]/).map(function (s) { return s.trim(); }).filter(function (s) { return s !== ''; });
+    if (!parts.length) { kwMsg('error', '키워드가 비어 있어요. 더하고 싶은 낱말을 적은 뒤 "더하기"를 눌러 주세요.'); return; }
+    var added = [], errs = [];
+    parts.forEach(function (p) {
+      if (/\s/.test(p)) { errs.push('"' + p + '"에 띄어쓰기가 있어요. 띄어쓰기 없는 낱말 하나로 적어 주세요. (예: 운영시간)'); return; }
+      if (kw[cat].some(function (k) { return k.toLowerCase() === p.toLowerCase(); })) { errs.push('"' + p + '"은(는) 이미 ' + CAT_NAME[cat] + '에 있어요.'); return; }
+      kw[cat].push(p); added.push(p);
+    });
+    if (!added.length) { kwMsg('error', errs.join(' ')); return; }
+    afterKwChange('"' + added.join(', ') + '"을(를) ' + CAT_NAME[cat] + '에 더했어요.' + (errs.length ? ' (' + errs.join(' ') + ')' : ''));
+    var inp = document.querySelector('.kwin[data-cat="' + cat + '"]');
+    if (inp) inp.focus();
+  }
+  $('kwEditor').addEventListener('click', function (e) {
+    var t = e.target.closest ? e.target.closest('button') : null;
+    if (!t) return;
+    if (t.hasAttribute('data-add')) {
+      var cat = t.getAttribute('data-add'), inp = document.querySelector('.kwin[data-cat="' + cat + '"]');
+      addKeywords(cat, inp ? inp.value : '');
+    } else if (t.hasAttribute('data-del')) {
+      var c2 = t.getAttribute('data-del'), k2 = t.getAttribute('data-kw');
+      kw[c2] = kw[c2].filter(function (k) { return k !== k2; });
+      afterKwChange('"' + k2 + '"을(를) ' + CAT_NAME[c2] + '에서 뺐어요.');
+    }
+  });
+  $('kwEditor').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' || e.isComposing || !e.target.classList.contains('kwin')) return;   // 한글 입력 중 Enter는 무시
+    e.preventDefault();
+    addKeywords(e.target.getAttribute('data-cat'), e.target.value);
+  });
+  $('kwReset').addEventListener('click', function () {
+    kw = defaultKw();
+    afterKwChange('분야별 키워드를 처음 상태로 되돌렸어요.');
+  });
+  renderKwEditor();
+
+  /* ---------- 6단계: 결과보고서 초안 ---------- */
+  var NEED = '<mark data-need="1" style="background:#ffe600;color:#000;padding:0 2px">[입력 필요]</mark>';
+  var reportBuilt = false, reportEdited = false;
+
+  function ovVal(id) { var v = $(id).value.trim(); return v === '' ? NEED : esc(v); }
+  function readOverview() {
+    return { title: ovVal('ov_title'), org: ovVal('ov_org'), dept: ovVal('ov_dept'), author: ovVal('ov_author'),
+             period: ovVal('ov_period'), target: ovVal('ov_target'), method: ovVal('ov_method') };
+  }
+
+  // 보고서 조각 (복사해서 한글·구글 문서에 붙여도 모양이 남도록 스타일을 직접 넣는다)
+  function rpH(t) { return '<!--PG--><h2 style="font-size:14pt;font-weight:700;margin:22px 0 6px;padding-bottom:3px;border-bottom:1.5px solid #1a2f5a;color:#1a2f5a">' + esc(t) + '</h2>'; }
+  function rpB(t) { return '<p style="font-size:12pt;font-weight:700;margin:12px 0 3px">□ ' + t + '</p>'; }
+  function rpO(t) { return '<p style="font-size:11pt;margin:3px 0 3px 0.8em;padding-left:1.3em;text-indent:-1.3em">ㅇ ' + t + '</p>'; }
+  function rpD(t) { return '<p style="font-size:10.5pt;margin:2px 0 2px 2.4em;padding-left:1.1em;text-indent:-1.1em;color:#222">- ' + t + '</p>'; }
+  function rpCap(t) { return '<p style="font-size:10pt;font-weight:700;margin:10px 0 3px 0.8em">' + t + '</p>'; }
+  function rpTable(head, body, rightFrom) {   // rightFrom: 이 번호부터는 숫자 칸(오른쪽 맞춤)
+    var th = 'border:1pt solid #000;background:#e9edf4;padding:4px 6px;text-align:center;font-weight:700';
+    var h = '<table style="border-collapse:collapse;border-spacing:0;width:calc(100% - 2pt);margin-right:2pt;font-size:9.5pt;margin:0 0 6px"><tbody><tr>' +
+      head.map(function (x) { return '<th style="' + th + '">' + x + '</th>'; }).join('') + '</tr>';
+    body.forEach(function (r) {
+      h += '<tr>' + r.map(function (x, i) {
+        return '<td style="border:1pt solid #000;padding:4px 6px;text-align:' + (rightFrom !== undefined && i >= rightFrom ? 'right;white-space:nowrap' : 'left') + '">' + x + '</td>';
+      }).join('') + '</tr>';
+    });
+    return h + '</tbody></table>';
+  }
+  function q(s) { return '‘' + esc(s) + '’'; }
+  function namesOf(list, max) {
+    var n = list.slice(0, max || 3).map(function (s) { return q(s.name); }).join(', ');
+    return list.length > (max || 3) ? n + ' 외 ' + (list.length - (max || 3)) + '개' : n;
+  }
+  function optNames(list, max) {   // list: [[보기, 건수], ...]
+    var n = list.slice(0, max || 3).map(function (e) { return q(e[0]); }).join(', ');
+    return list.length > (max || 3) ? n + ' 외 ' + (list.length - (max || 3)) + '개' : n;
+  }
+
+  // 5점 척도 요약 (요약 카드와 같은 기준)
+  function scaleSummary(stats) {
+    var withN = stats.filter(function (s) { return s.n > 0; }), ov = [], ts = 0, tn = 0;
+    stats.forEach(function (s) {
+      var t = s.title + ' ' + s.name;
+      if (/전반|종합/.test(t) && /만족/.test(t)) ov.push(s);
+      ts += s.sum; tn += s.n;
+    });
+    function pick(dir) {
+      if (!withN.length) return [];
+      var best = [withN[0]], i, c;
+      for (i = 1; i < withN.length; i++) {
+        c = cmpMean(withN[i], best[0]) * dir;
+        if (c > 0) best = [withN[i]]; else if (c === 0) best.push(withN[i]);
+      }
+      return best;
+    }
+    return { withN: withN, ov: ov, ts: ts, tn: tn, high: pick(1), low: pick(-1) };
+  }
+  function avgOf(s) { return fmtFrac(s.sum, s.n, 2); }
+  function s100Of(s) { return fmtFrac(s.sum * 20, s.n, 1); }
+
+  function buildReport() {
+    var ctx = lastCtx, b = ctx.basis, stats = ctx.stats, idxs = ctx.idxs, ov = readOverview(), tn = 0, h = '', sm = scaleSummary(stats);
+    function tcap(t) { tn++; return rpCap('〈표 ' + tn + '〉 ' + t); }
+
+    h += '<h1 style="text-align:center;font-size:20pt;font-weight:700;margin:0 0 16px;line-height:1.4">' + (ov.title === NEED ? NEED : ov.title) + (/결과보고서\s*$/.test(ov.title) ? '' : ' 결과보고서') + '</h1>';
+
+    /* Ⅰ. 조사 개요 */
+    h += rpH('Ⅰ. 조사 개요') + rpB('조사 개요') + tcap('조사 개요') +
+      rpTable(['구분', '내용'], [['조사명', ov.title], ['기관', ov.org], ['부서', ov.dept], ['작성자', ov.author],
+        ['조사 기간', ov.period], ['조사 대상', ov.target], ['조사 방법', ov.method]]);
+    h += rpB('분석 범위');
+    h += rpO(b.useBad
+      ? '응답 ' + b.total + '건 중 모든 5점 척도 문항에 같은 점수로 답한 ' + b.bad + '건을 제외한 ' + b.used + '건을 분석에 활용함'
+      : '응답 ' + b.used + '건 전체를 분석에 활용함');
+    h += rpD('분석 문항은 5점 척도 ' + snap.scale.length + '개, 선택형 ' + (snap.single.length + snap.multi.length) + '개, 서술형 ' + snap.text.length + '개임');
+
+    /* Ⅱ. 응답자 특성 */
+    h += rpH('Ⅱ. 응답자 특성') + rpB('응답자 현황') + rpO('응답자는 총 ' + b.used + '명임');
+    var choices = snap.single.map(function (c) { return { c: c, multi: false, t: tallySingle(c, idxs) }; })
+      .concat(snap.multi.map(function (c) { return { c: c, multi: true, t: tallyMulti(c, idxs) }; }));
+    if (!choices.length) {
+      h += rpO('선택형 문항이 없어 응답자 수만 제시함');
+    } else {
+      h += rpB('선택형 문항 결과');
+      choices.forEach(function (x) {
+        var t = x.t, name = x.c.name;
+        if (!t.n) { h += rpO(q(name) + ' 문항은 답한 사람이 없음'); return; }
+        var top = t.list.filter(function (e) { return e[1] === t.list[0][1]; });
+        h += rpO(q(name) + ' 문항에서 가장 많이 선택된 보기는 ' + optNames(top) + '(' + (top.length > 1 ? '각 ' : '') + t.list[0][1] + '건, ' + pct(t.list[0][1], t.n) + ')임');
+        h += rpD('답한 사람 수는 ' + t.n + '명임');
+        if (x.multi) h += rpD('복수 선택 문항으로 총 선택 수는 ' + t.total + '건이며, 비율의 합은 100%를 넘을 수 있음');
+        var shown = t.list.slice(0, 10), sum = 0;
+        h += tcap(esc(name) + ' 응답 결과');
+        h += rpTable(['보기', '건수', '비율'], shown.map(function (e) { sum += e[1]; return [esc(e[0]), String(e[1]), pct(e[1], t.n)]; })
+          .concat(t.list.length > shown.length ? [] : [['합계' + (x.multi ? ' (총 선택 수)' : ''), String(sum), pct(sum, t.n)]]), 1);
+        if (t.list.length > shown.length) h += rpD('건수가 많은 ' + shown.length + '개 보기만 표로 제시함(전체 ' + t.list.length + '개 보기)');
+      });
+    }
+
+    /* Ⅲ. 만족도 분석 */
+    h += rpH('Ⅲ. 만족도 분석');
+    if (!stats.length) {
+      h += rpB('5점 척도 문항 분석') + rpO('5점 척도 문항이 없어 만족도 분석 대상이 없음');
+    } else {
+      h += rpB('5점 척도 문항 분석');
+      if (sm.ov.length && sm.ov[0].n > 0) {
+        var o = sm.ov[0];
+        h += rpO('전반적 이용 만족도는 평균 ' + avgOf(o) + '점(100점 환산 ' + s100Of(o) + '점)으로 나타남');
+        h += rpD('기준 문항은 ' + q(o.name) + '(응답 ' + o.n + '명)임' + (sm.ov.length > 1 ? ' (비슷한 문항이 여러 개여서 첫 번째 문항을 기준으로 함)' : ''));
+      } else if (sm.ov.length) {
+        h += rpO('전반적 이용 만족도 문항에 답한 응답이 없음');
+      } else if (sm.tn > 0) {
+        h += rpO('5점 척도 문항 전체 평균은 ' + fmtFrac(sm.ts, sm.tn, 2) + '점(100점 환산 ' + fmtFrac(sm.ts * 20, sm.tn, 1) + '점)으로 나타남');
+        h += rpD('5점 척도 ' + stats.length + '개 문항의 응답 ' + sm.tn + '개를 합산하여 산출함');
+      }
+      if (sm.withN.length >= 2) {
+        h += rpO('가장 높은 문항은 ' + namesOf(sm.high) + '(' + avgOf(sm.high[0]) + '점), 가장 낮은 문항은 ' + namesOf(sm.low) + '(' + avgOf(sm.low[0]) + '점)임');
+      } else if (sm.withN.length === 1) {
+        h += rpO('5점 척도 문항은 ' + q(sm.withN[0].name) + ' 1개이며, 평균은 ' + avgOf(sm.withN[0]) + '점임');
+      }
+      h += tcap('5점 척도 문항별 집계표');
+      h += rpTable(['문항', 'n', '1점', '2점', '3점', '4점', '5점', '평균', '100점 환산', '긍정 비율'], stats.map(function (s) {
+        return [esc(s.name), String(s.n)].concat(s.counts.map(String)).concat(s.n > 0
+          ? [avgOf(s), s100Of(s), pct(s.counts[3] + s.counts[4], s.n)] : ['-', '-', '-']);
+      }), 1);
+      var inv = 0; stats.forEach(function (s) { inv += s.invalidTotal || 0; });
+      if (inv > 0) h += rpD('1~5점이 아닌 값 ' + inv + '개는 계산에서 제외함');
+      h += rpB('계산 방식');
+      h += rpO('n은 그 문항에 답한 응답자 수이며, 빈칸은 0점으로 처리하지 않고 계산에서 제외함');
+      h += rpO('평균은 점수 합계를 n으로 나눈 값임');
+      h += rpO('100점 환산은 평균에 20을 곱한 값임');
+      h += rpO('긍정 비율은 4점과 5점으로 답한 응답 수를 n으로 나눈 값임');
+      h += rpO('반올림은 표에 표시할 때만 하였으며, 평균은 소수 둘째 자리, 100점 환산과 비율은 소수 첫째 자리까지 표시함');
+    }
+
+    /* Ⅳ. 서술형 의견 분석 */
+    h += rpH('Ⅳ. 서술형 의견 분석');
+    var catAll = { exh: 0, fac: 0, edu: 0, inf: 0, pra: 0 }, totalAll = 0;
+    if (!textView.length) {
+      h += rpB('서술형 의견 현황') + rpO('서술형 문항이 없어 분석 대상이 없음');
+    } else {
+      textView.forEach(function (v) {
+        var N = v.items.length, dropTotal = 0;
+        v.dropped.forEach(function (n) { dropTotal += n; });
+        h += rpB(q(v.c.name) + ' 문항');
+        h += rpO('서술형 응답은 ' + N + '건(응답률 ' + fmtFrac(N * 100, v.M, 1) + '%)임');
+        h += rpD('빈 답 ' + v.blank + '건과 의미 없는 답 ' + dropTotal + '건은 제외함');
+        if (!N) { h += rpO('분석할 서술형 의견이 없음'); return; }
+        var list = catList(v), named = list.filter(function (e) { return e[2] !== 'none'; });
+        list.forEach(function (e) { totalAll += e[1]; if (e[2] !== 'none') catAll[e[2]] += e[1]; });
+        var top = named.filter(function (e) { return e[1] === named[0][1]; });
+        if (named[0][1] > 0) {
+          h += rpO('서술형 의견은 ' + top.map(function (e) { return esc(e[0]); }).join(', ') + ' 분야가 ' + (top.length > 1 ? '각 ' : '') + named[0][1] + '건(' + pct(named[0][1], N) + ')으로 가장 많음');
+        } else {
+          h += rpO('분야별로 구분되는 의견이 없음');
+        }
+        var none = list.filter(function (e) { return e[2] === 'none'; })[0];
+        if (none && none[1] > 0) h += rpD('어느 분야에도 해당하지 않는 의견(미분류)은 ' + none[1] + '건(' + pct(none[1], N) + ')임');
+        var sum = 0;
+        h += tcap(esc(v.c.name) + ' 분야별 현황');
+        h += rpTable(['분야', '건수', '비율'], list.map(function (e) { sum += e[1]; return [esc(e[0]), String(e[1]), pct(e[1], N)]; })
+          .concat([['합계', String(sum), pct(sum, N)]]), 1);
+        h += rpD('분야는 의견 내용을 확인하여 구분한 결과이며, 의견 하나는 한 분야에만 포함함');
+        h += rpD('비율은 분야별 건수를 서술형 응답 수로 나눈 값임');
+      });
+    }
+
+    /* Ⅴ. 종합 평가 및 개선 방향 */
+    h += rpH('Ⅴ. 종합 평가 및 개선 방향') + rpB('종합 평가');
+    var any = false;
+    if (sm.ov.length && sm.ov[0].n > 0) { any = true; h += rpO('전반적 이용 만족도는 100점 환산 ' + s100Of(sm.ov[0]) + '점으로 나타남'); }
+    else if (!sm.ov.length && sm.tn > 0) { any = true; h += rpO('5점 척도 문항 전체 평균은 100점 환산 ' + fmtFrac(sm.ts * 20, sm.tn, 1) + '점으로 나타남'); }
+    if (sm.withN.length >= 2) { any = true; h += rpO('가장 높은 문항은 ' + namesOf(sm.high) + '(' + avgOf(sm.high[0]) + '점), 가장 낮은 문항은 ' + namesOf(sm.low) + '(' + avgOf(sm.low[0]) + '점)임'); }
+    var catRank = CAT_DEFS.map(function (c) { return [c.name, catAll[c.id], c.id]; }).sort(function (a, b) { return b[1] - a[1]; });
+    var sumAll = 0; CAT_DEFS.forEach(function (c) { sumAll += catAll[c.id]; });
+    if (sumAll > 0) {
+      var topc = catRank.filter(function (e) { return e[1] === catRank[0][1]; });
+      any = true;
+      h += rpO('서술형 의견은 ' + topc.map(function (e) { return esc(e[0]); }).join(', ') + ' 분야가 ' + (topc.length > 1 ? '각 ' : '') + catRank[0][1] + '건(' + pct(catRank[0][1], totalAll) + ')으로 가장 많음');
+    }
+    var aiOv = aiLines('overall'); if (aiOv.length) any = true;
+    aiOv.forEach(function (l) { h += rpO(l); });
+    if (!any) h += rpO('종합 평가 내용: ' + NEED);
+
+    h += rpB('개선 방향');
+    var imp = false;
+    if (sm.withN.length >= 2) {
+      sm.low.slice(0, 3).forEach(function (s) { imp = true; h += rpO(esc(s.name) + ' 관련 개선 방안 검토 필요'); });
+    }
+    catRank.filter(function (e) { return e[2] !== 'pra' && e[1] > 0; }).slice(0, 2).forEach(function (e) {
+      imp = true; h += rpO(esc(e[0]) + ' 분야 의견 관련 개선 방안 검토 필요');
+    });
+    var aiIm = aiLines('improve');
+    aiIm.forEach(function (l) { h += rpO(l); });
+    if (!imp && !aiIm.length) h += rpO('개선 방향: ' + NEED);
+    h += rpO('소요 예산: ' + NEED);
+    h += rpO('추진 일정: ' + NEED);
+    // 장(Ⅰ~Ⅴ)마다 한 쪽씩: 제목은 Ⅰ장과 같은 쪽
+    var parts = h.split('<!--PG-->'), pages = [parts[0] + parts[1]].concat(parts.slice(2));
+    return pages.map(function (p, i) {
+      return '<div class="pg" style="' + (i < pages.length - 1 ? 'break-after:page;page-break-after:always' : '') + '">' + p + '</div>';
+    }).join('');
+  }
+
+  window.addEventListener('beforeprint', function () { var g = window.getSelection && window.getSelection(); if (g) g.removeAllRanges(); scrollYBeforePrint = window.scrollY; window.scrollTo(0, 0); });
+  var scrollYBeforePrint = 0;
+  window.addEventListener('afterprint', function () { window.scrollTo(0, scrollYBeforePrint); });
+  function markReportStale() {
+    if (!reportBuilt) return;
+    var m = $('reportStale');
+    m.className = 'msg warn';
+    m.textContent = '조사 개요나 분석 결과가 바뀌었어요. 아래 보고서에는 아직 반영되지 않았습니다. "보고서 초안 만들기"를 다시 누르면 반영됩니다(보고서에서 직접 고친 내용은 사라집니다).';
+  }
+  function showReportMsg(kind, text) { var m = $('reportMsg'); m.className = 'msg ' + kind; m.textContent = text; }
+
+  $('reportBtn').addEventListener('click', function () {
+    if (!snap || !lastCtx) {
+      showReportMsg('error', '분석 결과가 아직 없어요. 위에서 "분석 시작"을 먼저 눌러 주세요.');
+      return;
+    }
+    if (reportBuilt && reportEdited && !window.confirm('보고서에서 직접 고친 내용이 있어요. 다시 만들면 고친 내용이 사라집니다. 계속할까요?')) return;
+    $('report').innerHTML = buildReport();
+    reportBuilt = true; reportEdited = false;
+    $('reportBox').hidden = false;
+    $('reportStale').className = 'msg'; $('reportStale').textContent = '';
+    showReportMsg('ok', '보고서 초안을 만들었어요. 노란색 [입력 필요] 칸은 보고서 안을 클릭해서 직접 적어 주세요.');
+    $('reportBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('report').addEventListener('input', function () { reportEdited = true; });
+  $('ovBox').addEventListener('input', markReportStale);
+
+  $('copyBtn').addEventListener('click', function () {
+    var el = $('report'), sel = window.getSelection(), ok = false;
+    function good() { showReportMsg('ok', '복사했어요. 한글이나 구글 문서에서 붙여넣기(Ctrl + V) 하세요. 표도 함께 복사됩니다.'); }
+    function bad() { showReportMsg('error', '복사하지 못했어요. 보고서 안을 클릭한 뒤 Ctrl + A, Ctrl + C를 눌러 직접 복사해 주세요.'); }
+    try {
+      var r = document.createRange();
+      r.selectNodeContents(el);
+      sel.removeAllRanges(); sel.addRange(r);
+      ok = document.execCommand('copy');
+    } catch (e) { ok = false; }
+    sel.removeAllRanges();
+    if (ok) { good(); return; }
+    if (navigator.clipboard && window.ClipboardItem) {
+      navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([el.innerHTML], { type: 'text/html' }),
+        'text/plain': new Blob([el.innerText], { type: 'text/plain' })
+      })]).then(good, bad);
+    } else { bad(); }
+  });
+
+  var titleBeforePrint = null;
+  $('printBtn').addEventListener('click', function () {
+    var t = $('ov_title').value.trim();
+    titleBeforePrint = document.title;
+    document.title = (t !== '' ? t : '설문조사') + ' 결과보고서';   // PDF 파일 이름으로 쓰임
+    window.print();
+  });
+  window.addEventListener('afterprint', function () { if (titleBeforePrint !== null) { document.title = titleBeforePrint; titleBeforePrint = null; } });
+
+  /* ---------- 8단계: 글쓰기 도움 (선택 · Google Gemini generateContent REST) ---------- */
+  // 쓰지 않으면 아무것도 밖으로 나가지 않는다. 쓸 때도 확인창에서 "보내기"를 눌러야만 보낸다.
+  // API 키는 입력 칸에만 있고, 변수·저장소·주소(URL)에 넣지 않는다.
+  var AI_HOST = 'https://generativelanguage.googleapis.com';
+  var AI_DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+  var AI_PER_CHUNK = 100, AI_MAX_CHUNKS = 5, AI_SAMPLE_PER_CAT = 15, AI_TEXT_CUT = 150, AI_TIMEOUT_MS = 120000;
+  var aiBusy = false, aiAbort = null, aiTimerId = null, aiStopReason = '', aiSeq = 0, aiInserted = [], aiCardInfo = {};
+  var V_TERMS = [['AI', /(^|[^A-Za-z])AI(?![A-Za-z])/i], ['인공지능', /인공\s*지능/], ['자동 분류', /자동\s*분류/], ['자동 생성', /자동\s*생성/], ['전년', /전년/], ['목표', /목표/]];
+  var AI_YELLOW = 'background:#ffe600;color:#000;padding:0 2px';
+
+  function AiError(message) { this.message = message; }
+  function aiMsg(kind, text) { var m = $('aiMsg'); m.className = text ? 'msg ' + kind : 'msg'; m.textContent = text; }
+  function aiConnMsg(kind, text) { var m = $('aiConn'); m.className = text ? 'msg ' + kind : 'msg'; m.textContent = text; }
+  function aiModel() { return $('aiModel').value.trim().replace(/^models\//, ''); }
+  function aiUrl(model, method) { return AI_HOST + '/v1beta/models/' + encodeURIComponent(model) + (method ? ':' + method : ''); }
+  function aiPrecheck() {   // 키·모델 이름이 비어 있거나 이상하면 쉬운 말로 알려 준다 (문제 없으면 '')
+    if (!$('aiKey').value.trim()) return 'API 키를 먼저 입력해 주세요. 키는 Google AI Studio(ai.google.dev)에서 만들 수 있어요.';
+    var m = aiModel();
+    if (!m) return '모델 이름을 적어 주세요. 예: ' + AI_DEFAULT_MODEL;
+    if (!/^[A-Za-z0-9._\-]+$/.test(m)) return '모델 이름에는 영문, 숫자, 점(.), 하이픈(-)만 쓸 수 있어요. 공식 문서의 모델 이름을 그대로 붙여 넣어 주세요.';
+    return '';
+  }
+
+  function aiHttpError(status, bodyText) {
+    var msg = '';
+    try { var j = JSON.parse(bodyText); msg = (j && j.error && j.error.message) ? String(j.error.message) : ''; } catch (e) { msg = ''; }
+    var keyBad = /api[ _-]?key|expired|authentication|credential/i.test(msg);
+    var KEY = 'API 키가 맞지 않거나 이 키로는 쓸 수 없어요. 키를 다시 복사해서 붙여 넣어 보고, 그래도 안 되면 Google AI Studio에서 새 키를 만들어 주세요.';
+    if (status === 401 || status === 403 || (status === 400 && keyBad)) return KEY;
+    if (status === 400) return 'Google이 보낸 내용을 받아들이지 못했어요. 모델 이름이 맞는지 확인하고, 그래도 안 되면 다시 한 번 눌러 보세요. (오류 번호 400)';
+    if (status === 404) return '모델 이름이 맞지 않아요. "모델 이름" 칸을 공식 문서(ai.google.dev)의 모델 이름과 맞춰 고쳐 주세요.';
+    if (status === 429) return '사용 한도를 넘었어요. 1~2분 뒤에 다시 해 보세요. 계속 안 되면 Google AI Studio에서 사용 한도를 확인해 주세요.';
+    if (status === 408 || status === 504) return 'Google 서버가 제때 답하지 못했어요. 잠시 뒤에 다시 해 보세요.';
+    if (status >= 500) return 'Google 쪽 서버가 바쁘거나 문제가 있어요. 잠시 뒤에 다시 해 보세요.';
+    return '예상하지 못한 오류가 났어요. (오류 번호 ' + status + ') 잠시 뒤에 다시 해 보세요.';
+  }
+  var AI_NET_MSG = '인터넷에 연결되지 않았거나 Google 서버에 닿지 못했어요. 인터넷 연결을 확인하고 다시 해 주세요. 기관 네트워크에서 Google 접속을 막고 있을 수도 있어요.';
+
+  // 요청 하나 보내기. 키는 요청 머리글(x-goog-api-key)로만 보낸다.
+  function aiRequest(method, url, bodyObj) {
+    var key = $('aiKey').value.trim();
+    if (!key) return Promise.reject(new AiError('API 키를 먼저 입력해 주세요.'));
+    var headers = { 'x-goog-api-key': key };
+    if (bodyObj) headers['Content-Type'] = 'application/json';
+    var init = { method: method, headers: headers, referrerPolicy: 'no-referrer', credentials: 'omit', cache: 'no-store' };
+    if (aiAbort) init.signal = aiAbort.signal;
+    if (bodyObj) init.body = JSON.stringify(bodyObj);
+    return fetch(url, init).then(function (res) {
+      return res.text().then(function (t) {
+        if (!res.ok) throw new AiError(aiHttpError(res.status, t));
+        try { return JSON.parse(t); } catch (e) { throw new AiError('Google에서 받은 답을 읽지 못했어요. 잠시 뒤에 다시 해 주세요.'); }
+      });
+    }, function (err) {
+      if (err && err.name === 'AbortError') {
+        throw new AiError(aiStopReason === 'timeout' ? '2분이 지나도 답이 없어서 멈췄어요. 잠시 뒤에 다시 해 보세요.' : '멈췄어요. 보고서와 표는 바뀌지 않았습니다.');
+      }
+      throw new AiError(AI_NET_MSG);
+    });
+  }
+
+  function aiGenerate(model, system, user, wantJson) {
+    var cfg = { temperature: 0.3, maxOutputTokens: 8192 };
+    if (wantJson) cfg.responseMimeType = 'application/json';
+    var body = {
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: cfg
+    };
+    return aiRequest('POST', aiUrl(model, 'generateContent'), body).then(function (j) {
+      var c = j.candidates && j.candidates[0];
+      if (!c || !c.content || !c.content.parts) {
+        var br = j.promptFeedback && j.promptFeedback.blockReason;
+        throw new AiError(br ? '보낸 내용이 Google의 안전 기준에 걸려 답을 받지 못했어요. 내용을 확인하고 다시 해 보세요.'
+          : '받은 답이 비어 있어요. 다시 해 보세요. 계속 비어 있으면 모델 이름을 바꿔 보세요.');
+      }
+      var text = c.content.parts.filter(function (p) { return !p.thought && typeof p.text === 'string'; }).map(function (p) { return p.text; }).join('');
+      if (!text.trim()) throw new AiError('받은 답이 비어 있어요. 다시 해 보세요. 계속 비어 있으면 모델 이름을 바꿔 보세요.');
+      return text;
+    });
+  }
+
+  /* 진행 표시 (경과 시간 + 멈추기) */
+  function aiBegin(label) {
+    aiBusy = true; aiStopReason = ''; aiAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var t0 = Date.now();
+    $('aiBusyText').textContent = label;
+    $('aiBusy').hidden = false;
+    $('aiElapsed').textContent = '경과 시간 0초';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ai], #aiTestBtn'), function (b) { b.disabled = true; });
+    aiTimerId = setInterval(function () {
+      var ms = Date.now() - t0, sec = Math.floor(ms / 1000);
+      $('aiElapsed').textContent = '경과 시간 ' + sec + '초' + (sec >= 20 ? ' · 조금 오래 걸리고 있어요. 기다리거나 "멈추기"를 눌러 주세요.' : '');
+      if (ms >= AI_TIMEOUT_MS && aiAbort) { aiStopReason = 'timeout'; aiAbort.abort(); }
+    }, 500);
+  }
+  function aiEnd() {
+    aiBusy = false;
+    if (aiTimerId) { clearInterval(aiTimerId); aiTimerId = null; }
+    aiAbort = null;
+    $('aiBusy').hidden = true;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ai], #aiTestBtn'), function (b) { b.disabled = false; });
+  }
+  $('aiStop').addEventListener('click', function () { aiStopReason = 'user'; if (aiAbort) aiAbort.abort(); });
+
+  $('aiTestBtn').addEventListener('click', function () {
+    if (aiBusy) return;
+    var pre = aiPrecheck();
+    if (pre) { aiConnMsg('error', pre); return; }
+    aiConnMsg('', '');
+    aiBegin('연결을 확인하는 중…');
+    aiRequest('GET', aiUrl(aiModel(), ''), null).then(function (j) {
+      aiEnd();
+      if (j && j.supportedGenerationMethods && j.supportedGenerationMethods.indexOf('generateContent') < 0) {
+        aiConnMsg('warn', '키는 맞지만, 이 모델은 글쓰기(generateContent)에 쓸 수 없다고 나와요. 다른 모델 이름으로 바꿔 보세요.');
+      } else {
+        aiConnMsg('ok', '연결됐어요. 키와 모델 이름이 맞습니다. (연결 시험에는 키와 모델 이름만 보냈고, 조사 내용은 보내지 않았어요.)');
+      }
+    }, function (err) { aiEnd(); aiConnMsg('error', err instanceof AiError ? err.message : AI_NET_MSG); });
+  });
+  $('aiClearKey').addEventListener('click', function () {
+    $('aiKey').value = '';
+    aiConnMsg('ok', '키를 지웠어요. 이 화면에도, 컴퓨터 어디에도 남아 있지 않습니다.');
+  });
+
+  /* 값 채우기: AI가 쓴 {평균:문항이름} 같은 자리표시자를 앱이 계산한 값으로 바꾼다 */
+  function aiNorm(s) { return String(s).replace(/\s+/g, ' ').trim(); }
+  function aiCatTotals() {
+    var counts = { exh: 0, fac: 0, edu: 0, inf: 0, pra: 0, none: 0 }, total = 0;
+    textView.forEach(function (v) { v.items.forEach(function (it) { counts[it.cat]++; total++; }); });
+    return { counts: counts, total: total };
+  }
+  function aiPh(k, name) {
+    if (!lastCtx) return null;
+    k = aiNorm(k); name = aiNorm(name || '');
+    if (k === '응답수') return String(lastCtx.basis.used);
+    if (k === '평균' || k === '100점' || k === '긍정' || k === 'n') {
+      var st = lastCtx.stats.filter(function (s) { return aiNorm(s.name) === name; })[0];
+      if (!st || st.n === 0) return null;
+      if (k === '평균') return avgOf(st);
+      if (k === '100점') return s100Of(st);
+      if (k === '긍정') return pct(st.counts[3] + st.counts[4], st.n);
+      return String(st.n);
+    }
+    if (k === '건수' || k === '비율') {
+      var id = null; ALL_CAT_IDS.forEach(function (c) { if (aiNorm(CAT_NAME[c]) === name) id = c; });
+      var ct = aiCatTotals();
+      if (!id || ct.total === 0) return null;
+      return k === '건수' ? String(ct.counts[id]) : pct(ct.counts[id], ct.total);
+    }
+    return null;
+  }
+
+  /* 글 조각(segment): {t:'text', v} 또는 {t:'ph', k, name} */
+  var AI_PH_RE = /\{\s*(응답수)\s*\}|\{\s*([^{}:：]+?)\s*[:：]\s*([^{}]+?)\s*\}/g;
+  function aiSegsOf(line) {
+    var segs = [], last = 0, m;
+    AI_PH_RE.lastIndex = 0;
+    while ((m = AI_PH_RE.exec(line)) !== null) {
+      if (m.index > last) segs.push({ t: 'text', v: line.slice(last, m.index) });
+      segs.push(m[1] ? { t: 'ph', k: '응답수', name: '' } : { t: 'ph', k: m[2], name: m[3] });
+      last = m.index + m[0].length;
+    }
+    if (last < line.length) segs.push({ t: 'text', v: line.slice(last) });
+    return segs;
+  }
+  function aiTextHtml(v) {   // 직접 쓴 숫자는 노란색으로
+    return v.split(/(\d+(?:[.,]\d+)?)/).map(function (p, i) {
+      return i % 2 ? '<mark data-aino="1" style="' + AI_YELLOW + '">' + esc(p) + '</mark>' : esc(p);
+    }).join('');
+  }
+  function aiSegHtml(seg, forReport) {
+    if (seg.t === 'text') return aiTextHtml(seg.v);
+    var val = aiPh(seg.k, seg.name), label = '{' + seg.k + (seg.name ? ':' + seg.name : '') + '}';
+    if (forReport) return val !== null ? esc(val) : '<mark data-aino="1" data-unres="1" style="' + AI_YELLOW + '">' + esc(label) + '</mark>';
+    return '<span data-ph="1" data-k="' + esc(seg.k) + '" data-name="' + esc(seg.name) + '" contenteditable="false" class="aifill' + (val === null ? ' unres' : '') + '">' + esc(val !== null ? val : label) + '</span>';
+  }
+  function aiLinesHtml(lines) {
+    if (!lines.length) return '<div class="ailine"><br></div>';
+    return lines.map(function (l) { return '<div class="ailine">' + l.map(function (s) { return aiSegHtml(s, false); }).join('') + '</div>'; }).join('');
+  }
+  // 카드 안의 글(사람이 고친 것 포함)을 줄·조각으로 다시 읽기
+  function aiReadBody(body) {
+    var lines = [[]];
+    function nl() { if (lines[lines.length - 1].length) lines.push([]); }
+    function walk(n) {
+      if (n.nodeType === 3) { lines[lines.length - 1].push({ t: 'text', v: n.nodeValue }); return; }
+      if (n.nodeType !== 1) return;
+      if (n.tagName === 'BR') { nl(); return; }
+      if (n.getAttribute('data-ph')) { lines[lines.length - 1].push({ t: 'ph', k: n.getAttribute('data-k'), name: n.getAttribute('data-name') || '' }); return; }
+      var block = /^(DIV|P|LI)$/.test(n.tagName);
+      if (block) nl();
+      Array.prototype.forEach.call(n.childNodes, walk);
+      if (block) nl();
+    }
+    Array.prototype.forEach.call(body.childNodes, walk);
+    var out = [];
+    lines.forEach(function (l) {
+      var merged = [];
+      l.forEach(function (s) {
+        if (s.t === 'text' && merged.length && merged[merged.length - 1].t === 'text') merged[merged.length - 1].v += s.v; else merged.push({ t: s.t, v: s.v, k: s.k, name: s.name });
+      });
+      if (merged.length && merged[0].t === 'text') merged[0].v = merged[0].v.replace(/^\s+/, '');
+      if (merged.length && merged[merged.length - 1].t === 'text') merged[merged.length - 1].v = merged[merged.length - 1].v.replace(/\s+$/, '');
+      merged = merged.filter(function (s) { return s.t !== 'text' || s.v !== ''; });
+      if (merged.length) out.push(merged);
+    });
+    return out;
+  }
+  function aiPlain(lines) { return lines.map(function (l) { return l.map(function (s) { return s.t === 'text' ? s.v : ''; }).join(''); }).join('\n'); }
+
+  // 보고서에 넣은 글을 보고서 줄(HTML)로 (값은 보고서를 만드는 시점의 계산 결과로 채움)
+  function aiLines(kind) {
+    var out = [];
+    aiInserted.forEach(function (e) {
+      if (e.kind !== kind) return;
+      e.lines.forEach(function (l) { out.push(l.map(function (s) { return aiSegHtml(s, true); }).join('')); });
+    });
+    return out;
+  }
+
+  /* 보낼 글 만들기 */
+  var AI_SYS_WRITE =
+    '당신은 지방자치단체 설문조사 결과보고서의 문장 쓰기를 돕는 보조자입니다.\n' +
+    '반드시 지킬 것:\n' +
+    '1. 숫자를 직접 쓰지 마세요. 0~9 숫자, 소수, 퍼센트, "세 건"처럼 풀어 쓴 수도 쓰지 마세요. 숫자가 필요하면 아래 자리표시자만 쓰세요. 앱이 계산한 값으로 바꿔 넣습니다.\n' +
+    '   {평균:문항이름}  그 문항의 평균 점수 (숫자만 채워집니다. 뒤에 "점"을 직접 쓰세요)\n' +
+    '   {100점:문항이름}  100점 환산 점수 (숫자만 채워집니다)\n' +
+    '   {긍정:문항이름}  긍정 비율 (% 기호까지 채워집니다)\n' +
+    '   {n:문항이름}  그 문항에 답한 사람 수 (숫자만 채워집니다)\n' +
+    '   {건수:분야이름}  서술형 의견 건수 (숫자만 채워집니다. 뒤에 "건"을 직접 쓰세요)\n' +
+    '   {비율:분야이름}  서술형 의견 비율 (% 기호까지 채워집니다)\n' +
+    '   {응답수}  분석에 쓴 전체 응답 수 (숫자만 채워집니다)\n' +
+    '   문항이름과 분야이름은 아래 자료에 적힌 글자를 한 글자도 바꾸지 말고 그대로 쓰세요. "5점 척도"는 "척도 문항"이라고 쓰세요.\n' +
+    '2. 아래 자료에 없는 사실을 쓰지 마세요. 전년 대비, 목표, 달성, 예산, 일정, 원인 단정, 앞으로의 계획을 지어내지 마세요.\n' +
+    '3. 개조식으로 쓰세요. 한 줄에 한 문장이며, 문장은 "~함", "~임", "~필요"처럼 끝냅니다. 줄 앞에 번호나 기호를 붙이지 마세요.\n' +
+    '4. "AI", "인공지능", "자동" 같은 말을 쓰지 마세요.\n' +
+    '5. 인사말이나 설명 없이 본문 줄만 쓰세요.';
+  var AI_SYS_CLS =
+    '당신은 설문 서술형 의견을 분야별로 나누는 보조자입니다. 의견마다 아래 분야 중 정확히 하나를 고르세요. 답은 JSON 배열만 쓰고, 설명은 쓰지 마세요.';
+
+  function aiResultsText() {
+    var st = lastCtx.stats, ct = aiCatTotals(), L = [];
+    L.push('분석에 쓴 응답 수(참고용): ' + lastCtx.basis.used);
+    if (st.length) {
+      L.push('', '[척도 문항 결과] 문항이름 | 답한 사람 수 | 평균 | 100점 환산 | 긍정 비율  (숫자는 참고용이며 문장에 옮겨 쓰지 마세요)');
+      st.forEach(function (s) {
+        L.push('- ' + s.name + ' | ' + s.n + ' | ' + (s.n ? avgOf(s) : '-') + ' | ' + (s.n ? s100Of(s) : '-') + ' | ' + (s.n ? pct(s.counts[3] + s.counts[4], s.n) : '-'));
+      });
+    }
+    if (ct.total) {
+      L.push('', '[서술형 의견 분야별 건수] 분야이름 | 건수 | 비율  (숫자는 참고용이며 문장에 옮겨 쓰지 마세요)');
+      ALL_CAT_IDS.forEach(function (id) { L.push('- ' + CAT_NAME[id] + ' | ' + ct.counts[id] + ' | ' + pct(ct.counts[id], ct.total)); });
+    }
+    return L.join('\n');
+  }
+  function aiSampleText() {   // 분야별 의견 일부 (가림 처리된 글)
+    var by = {}, n = 0, L = [];
+    textView.forEach(function (v) {
+      v.items.forEach(function (it) {
+        if (it.cat === 'none') return;
+        (by[it.cat] = by[it.cat] || []).push(it.text);
+      });
+    });
+    ALL_CAT_IDS.forEach(function (id) {
+      (by[id] || []).slice(0, AI_SAMPLE_PER_CAT).forEach(function (t) { L.push('[' + CAT_NAME[id] + '] ' + cut(t.replace(/\s+/g, ' '), AI_TEXT_CUT)); n++; });
+    });
+    return { text: L.join('\n'), n: n };
+  }
+  var AI_NOSEND = ['개인정보로 뺀 열(이름·연락처·이메일·주소 등)의 내용', '원본 파일, 그리고 응답자별(행별) 점수·선택 내용', '엑셀 행 번호'];
+
+  function aiPlan(kind) {
+    var hasScale = lastCtx.stats.some(function (s) { return s.n > 0; }), ct = aiCatTotals(), plan, i;
+    if (kind === 'cls') {
+      var items = []; textView.forEach(function (v) { v.items.forEach(function (it) { items.push({ it: it, q: v.c.name }); }); });
+      if (!items.length) return { error: '서술형 의견이 없어서 분류를 다시 볼 수 없어요. 서술형 문항이 있는지 확인해 주세요.' };
+      var sent = items.slice(0, AI_PER_CHUNK * AI_MAX_CHUNKS), jobs = [];
+      var defs = CAT_DEFS.map(function (c) { return '- ' + c.name + ' : ' + kw[c.id].join(', '); }).join('\n') + '\n- 미분류 : 위 어느 분야에도 맞지 않을 때';
+      for (i = 0; i < sent.length; i += AI_PER_CHUNK) {
+        var chunk = sent.slice(i, i + AI_PER_CHUNK);
+        jobs.push({
+          system: AI_SYS_CLS, json: true, offset: i, size: chunk.length,
+          user: '분야 (이름 : 참고 낱말)\n' + defs + '\n\n' +
+            '규칙: 의견 하나는 한 분야에만 넣습니다. 불편, 부족, 필요, 좋겠다 같은 요청이나 불만이 들어 있으면 "칭찬·기타"가 아니라 내용에 맞는 분야로 나누세요.\n\n' +
+            '의견 목록 (번호, 탭, 글):\n' + chunk.map(function (e, j) { return (i + j + 1) + '\t' + e.it.text.replace(/\s+/g, ' '); }).join('\n') + '\n\n' +
+            '출력 형식: JSON 배열만. 모든 번호를 빠짐없이. 예: [{"id":1,"분야":"시설·인프라"},{"id":2,"분야":"미분류"}]'
+        });
+      }
+      plan = {
+        title: '서술형 분류 다시 보기', jobs: jobs,
+        send: ['서술형 의견 ' + sent.length + '건 (전화번호·이메일은 [가림]으로 바꾼 글, 번호만 붙여서 보냄)' + (items.length > sent.length ? ' — 전체 ' + items.length + '건 중 앞의 ' + sent.length + '건만' : ''),
+          '분야 이름과 분류 기준 낱말, 요청 설명 글'],
+        done: function (outs, model) { aiDoneCls(sent, outs, model); }
+      };
+    } else {
+      if (!hasScale && !ct.total) return { error: '글을 쓸 계산 결과가 없어요. 5점 척도나 서술형 문항이 있는지 확인해 주세요.' };
+      var isImp = kind === 'improve', data = aiResultsText(), samp = isImp ? aiSampleText() : { text: '', n: 0 };
+      plan = {
+        title: isImp ? '개선 방안 초안' : '종합 평가 문장',
+        jobs: [{
+          system: AI_SYS_WRITE, json: false,
+          user: '아래 계산 결과를 바탕으로 ' + (isImp
+            ? '보고서의 "개선 방안" 초안을 3~5줄 쓰세요. 평균이 낮은 문항과 의견이 많은 분야를 중심으로, "~ 관련 개선 방안 검토 필요" 수준으로만 쓰세요. 구체적인 사업, 예산, 일정은 쓰지 마세요.'
+            : '보고서의 "종합 평가" 문장을 3~5줄 쓰세요. 평균이 높은 문항과 낮은 문항, 의견이 많은 분야를 객관적으로 정리하세요.') +
+            '\n\n' + data + (samp.n ? '\n\n[분야별 의견 일부] (글만 참고하고, 쓰지 말아야 할 개인 정보는 없음)\n' + samp.text : '')
+        }],
+        send: ['척도 문항의 이름과 계산 결과 (답한 사람 수, 평균, 100점 환산, 긍정 비율)',
+          '서술형 의견의 분야별 건수와 비율',
+          isImp ? ('분야별 의견 ' + samp.n + '건 (분야마다 최대 ' + AI_SAMPLE_PER_CAT + '건, 가림 처리한 글)') : '서술형 의견 글은 보내지 않음',
+          '요청 설명 글'],
+        done: function (outs, model) { aiDoneText(kind, outs[0], model); }
+      };
+    }
+    plan.nosend = AI_NOSEND.slice();
+    plan.send.push('API 키 (Google이 본인 확인을 하는 데만 쓰이며, 보낼 글에는 들어 있지 않아요)');
+    return plan;
+  }
+
+  /* 확인창 */
+  function aiConfirm(plan, model) {
+    return new Promise(function (resolve) {
+      var dlg = $('aiDlg');
+      $('aiDlgWhat').textContent = plan.title;
+      $('aiDlgTo').textContent = 'Google (Gemini API) · ' + AI_HOST + ' · 모델: ' + model;
+      $('aiDlgSendList').innerHTML = plan.send.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('');
+      $('aiDlgNoList').innerHTML = plan.nosend.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('');
+      $('aiDlgText').textContent = plan.jobs.map(function (j, i) {
+        return (plan.jobs.length > 1 ? '──── 보내는 글 ' + (i + 1) + '/' + plan.jobs.length + ' ────\n' : '') +
+          '[역할 지시]\n' + j.system + '\n\n[요청 내용]\n' + j.user;
+      }).join('\n\n');
+      $('aiDlgDetails').open = false;
+      function onSend() { dlg.close('send'); }
+      function onCancel() { dlg.close('cancel'); }
+      function onClose() {
+        $('aiDlgSendBtn').removeEventListener('click', onSend);
+        $('aiDlgCancelBtn').removeEventListener('click', onCancel);
+        dlg.removeEventListener('close', onClose);
+        resolve(dlg.returnValue === 'send');
+      }
+      $('aiDlgSendBtn').addEventListener('click', onSend);
+      $('aiDlgCancelBtn').addEventListener('click', onCancel);
+      dlg.addEventListener('close', onClose);
+      dlg.returnValue = 'cancel';
+      dlg.showModal();
+    });
+  }
+
+  function aiStart(kind) {
+    if (aiBusy) return;
+    if (!snap || !lastCtx) { aiMsg('error', '분석 결과가 아직 없어요. 위에서 "분석 시작"을 먼저 눌러 주세요.'); return; }
+    var pre = aiPrecheck();
+    if (pre) { aiMsg('error', pre); return; }
+    var plan = aiPlan(kind);
+    if (plan.error) { aiMsg('warn', plan.error); return; }
+    aiMsg('', '');
+    var model = aiModel();
+    aiConfirm(plan, model).then(function (ok) {
+      if (!ok) { aiMsg('', ''); return; }
+      aiBegin(plan.title + ' 만드는 중…');
+      var outs = [], chain = Promise.resolve();
+      plan.jobs.forEach(function (job, i) {
+        chain = chain.then(function () {
+          if (plan.jobs.length > 1) $('aiBusyText').textContent = plan.title + ' 만드는 중… (' + (i + 1) + '/' + plan.jobs.length + ')';
+          return aiGenerate(model, job.system, job.user, job.json).then(function (t) { outs.push(t); });
+        });
+      });
+      chain.then(function () {
+        aiEnd();
+        try { plan.done(outs, model); } catch (e) { aiMsg('error', e instanceof AiError ? e.message : '받은 답을 화면에 옮기는 중에 문제가 생겼어요. 다시 해 보세요.'); }
+      }, function (err) { aiEnd(); aiMsg('error', err instanceof AiError ? err.message : '예상하지 못한 문제가 생겼어요. 페이지를 새로고침(F5)하고 다시 해 주세요.'); });
+    });
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-ai]') : null;
+    if (b && !b.disabled) aiStart(b.getAttribute('data-ai'));
+  });
+
+  /* 결과 카드 */
+  function aiNow() { var d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function aiCardShell(id, kind, title, meta, bodyHtml) {
+    return '<div class="aicard" data-card="' + id + '" data-kind="' + kind + '"><div class="aihd"><b>' + esc(title) + '</b>' +
+      '<span class="aimeta">' + esc(meta) + '</span><button type="button" class="linkbtn aidel">지우기</button></div>' + bodyHtml + '</div>';
+  }
+  function aiParseJson(text) {
+    var t = text.replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim(), v;
+    try { v = JSON.parse(t); } catch (e) {
+      var m = /\[[\s\S]*\]/.exec(t);
+      if (!m) throw new AiError('받은 답을 읽지 못했어요. 다시 해 보세요. 계속 안 되면 모델 이름을 바꿔 보세요.');
+      try { v = JSON.parse(m[0]); } catch (e2) { throw new AiError('받은 답을 읽지 못했어요. 다시 해 보세요. 계속 안 되면 모델 이름을 바꿔 보세요.'); }
+    }
+    if (!Array.isArray(v)) { var arr = null; if (v && typeof v === 'object') Object.keys(v).forEach(function (k) { if (Array.isArray(v[k])) arr = v[k]; }); v = arr; }
+    if (!v) throw new AiError('받은 답을 읽지 못했어요. 다시 해 보세요. 계속 안 되면 모델 이름을 바꿔 보세요.');
+    return v;
+  }
+  function aiCatId(name) {
+    var n = aiNorm(name || '').replace(/\s/g, ''), id = null;
+    ALL_CAT_IDS.forEach(function (c) { if (CAT_NAME[c].replace(/\s/g, '') === n) id = c; });
+    return id;
+  }
+
+  // ① 분류 다시 보기: 지금 분류와 다르게 나온 것만 보여 주고, 사람이 하나씩 눌러야 바뀐다
+  function aiDoneCls(sent, outs, model) {
+    var map = {};
+    outs.forEach(function (t) {
+      aiParseJson(t).forEach(function (r) {
+        if (!r || typeof r !== 'object') return;
+        var id = Number(r.id), c = aiCatId(r['분야'] !== undefined ? r['분야'] : (r.category !== undefined ? r.category : r['카테고리']));
+        if (isFinite(id) && c) map[id] = c;
+      });
+    });
+    var same = 0, miss = 0, diff = [];
+    sent.forEach(function (e, i) {
+      var c = map[i + 1];
+      if (!c) { miss++; return; }
+      if (c === e.it.cat) same++; else diff.push({ e: e, to: c });
+    });
+    var id = ++aiSeq;
+    var body = '<p class="hint" style="margin:6px 0">' + sent.length + '건을 확인했어요. ' + same + '건은 지금 분류와 같고, <b>' + diff.length + '건은 다르게 나왔어요</b>' +
+      (miss ? ' (' + miss + '건은 답을 받지 못했어요)' : '') + '. 다른 건은 하나씩 읽어 보고, 맞다고 생각할 때만 "제안대로 바꾸기"를 누르세요. 누르기 전에는 아무것도 바뀌지 않습니다.</p>';
+    if (!diff.length) body += '<p class="msg ok" style="margin:8px 0 0">지금 분류와 다르게 나온 의견이 없어요.</p>';
+    body += diff.map(function (d) {
+      return '<div class="airow"><div class="aimeta2">엑셀 ' + d.e.it.rowNum + '행 · ' + esc(d.e.q) + '</div><div class="aitxt">' + esc(d.e.it.text) + '</div>' +
+        '<div>지금 <b>' + esc(CAT_NAME[d.e.it.cat]) + '</b> → 제안 <b>' + esc(CAT_NAME[d.to]) + '</b> <button type="button" class="btn small aiapply" data-key="' + esc(d.e.it.key) + '" data-to="' + d.to + '">제안대로 바꾸기</button></div></div>';
+    }).join('');
+    $('aiCards').insertAdjacentHTML('afterbegin', aiCardShell(id, 'cls', '서술형 분류 다시 보기', model + ' · ' + aiNow(), body));
+    aiCardInfo[id] = { kind: 'cls' };
+    aiMsg('ok', '결과를 아래 카드로 보여 드려요.');
+  }
+
+  // ②③ 글 카드
+  function aiDoneText(kind, text, model) {
+    var raw = text.replace(/\*\*/g, '').replace(/`/g, '').split(/\r?\n/).map(function (l) {
+      return l.replace(/^\s*(?:#+\s*|[-•*·ㅇ□▪▶]\s*|\d+[.)]\s*)/, '').trim();
+    }).filter(function (l) { return l !== ''; }).slice(0, 8);
+    if (!raw.length) throw new AiError('받은 답이 비어 있어요. 다시 해 보세요.');
+    var lines = raw.map(aiSegsOf), id = ++aiSeq, title = kind === 'improve' ? '개선 방안 초안' : '종합 평가 문장';
+    var body = '<p class="hint" style="margin:6px 0">글을 직접 고치거나 지울 수 있어요. <mark style="' + AI_YELLOW + '">노란색 숫자</mark>는 AI가 직접 쓴 숫자라서 맞는지 꼭 확인해야 해요. <span class="aifill">밑줄 친 숫자</span>는 앱이 계산한 값입니다. "보고서에 넣기"를 눌러야만 보고서에 들어가요.</p>' +
+      '<div class="aibody" contenteditable="true" spellcheck="false" aria-label="' + esc(title) + ' (클릭해서 고칠 수 있음)">' + aiLinesHtml(lines) + '</div>' +
+      '<div class="aiflag" role="status"></div>' +
+      '<div class="aiact"><button type="button" class="btn small aiins">보고서에 넣기</button> <button type="button" class="btn small airem" hidden>보고서에서 빼기</button> <span class="aistat hint"></span></div>';
+    $('aiCards').insertAdjacentHTML('afterbegin', aiCardShell(id, kind, title, model + ' · ' + aiNow(), body));
+    aiCardInfo[id] = { kind: kind, snap: null };
+    aiUpdateCard($('aiCards').querySelector('[data-card="' + id + '"]'));
+    aiMsg('ok', '결과를 아래 카드로 보여 드려요. 읽어 보고, 고친 뒤에 "보고서에 넣기"를 눌러 주세요.');
+  }
+  function aiUpdateCard(card) {
+    if (!card || card.getAttribute('data-kind') === 'cls') return;
+    var body = card.querySelector('.aibody'), info = aiCardInfo[card.getAttribute('data-card')];
+    var lines = aiReadBody(body), direct = 0, unres = 0;
+    lines.forEach(function (l) {
+      l.forEach(function (s) {
+        if (s.t === 'text') direct += (s.v.match(/\d+(?:[.,]\d+)?/g) || []).length;
+        else if (aiPh(s.k, s.name) === null) unres++;
+      });
+    });
+    var flags = [];
+    if (direct) flags.push('AI가 직접 쓴 숫자 ' + direct + '개 (노란색) — 맞는지 확인하거나 지워 주세요.');
+    if (unres) flags.push('값을 채우지 못한 자리표시자 ' + unres + '개 (노란색) — 문항 이름이 맞지 않아요. 고치거나 지워 주세요.');
+    var fl = card.querySelector('.aiflag');
+    fl.className = 'aiflag' + (flags.length ? ' msg warn' : '');
+    fl.textContent = flags.join(' ');
+    var ins = !!(info && info.snap !== null), changed = ins && info.snap !== JSON.stringify(lines);
+    card.querySelector('.airem').hidden = !ins;
+    card.querySelector('.aiins').textContent = changed ? '고친 내용 다시 넣기' : (ins ? '보고서에 들어 있음 ✓' : '보고서에 넣기');
+    card.querySelector('.aiins').disabled = ins && !changed;
+    card.querySelector('.aistat').textContent = changed ? '카드를 고쳤어요. 보고서에는 아직 이전 내용이 들어 있습니다.' : (ins ? (card.getAttribute('data-kind') === 'improve' ? 'Ⅴ장 "개선 방향"에 들어갑니다. 아래 검증을 다시 해 주세요.' : 'Ⅴ장 "종합 평가"에 들어갑니다. 아래 검증을 다시 해 주세요.') : '');
+  }
+  function aiRefreshValues() {
+    if (!lastCtx) return;
+    Array.prototype.forEach.call(document.querySelectorAll('#aiCards span[data-ph]'), function (sp) {
+      var k = sp.getAttribute('data-k'), name = sp.getAttribute('data-name') || '', v = aiPh(k, name);
+      sp.textContent = v !== null ? v : '{' + k + (name ? ':' + name : '') + '}';
+      sp.className = 'aifill' + (v === null ? ' unres' : '');
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('#aiCards .aicard'), aiUpdateCard);
+  }
+  function aiDropClsCards() {
+    var cs = document.querySelectorAll('#aiCards .aicard[data-kind="cls"]');
+    if (!cs.length) return;
+    Array.prototype.forEach.call(cs, function (c) { delete aiCardInfo[c.getAttribute('data-card')]; c.parentNode.removeChild(c); });
+    aiMsg('warn', '분석 결과가 바뀌어서 "서술형 분류 다시 보기" 카드를 지웠어요. 필요하면 다시 눌러 주세요.');
+  }
+  function aiReset() {
+    if (aiAbort) { aiStopReason = 'user'; aiAbort.abort(); }
+    aiInserted = []; aiCardInfo = {};
+    $('aiCards').innerHTML = '';
+    aiMsg('', ''); aiConnMsg('', '');
+  }
+  function aiRemoveInserted(id) {
+    var before = aiInserted.length;
+    aiInserted = aiInserted.filter(function (e) { return e.id !== id; });
+    return aiInserted.length !== before;
+  }
+
+  $('aiCards').addEventListener('click', function (e) {
+    var t = e.target, card = t.closest ? t.closest('.aicard') : null;
+    if (!card) return;
+    var id = Number(card.getAttribute('data-card')), info = aiCardInfo[id];
+    if (t.classList.contains('aidel')) {
+      var was = aiRemoveInserted(id);
+      delete aiCardInfo[id]; card.parentNode.removeChild(card);
+      if (was) { markReportStale(); verInvalidate(); aiMsg('warn', '보고서에 넣었던 글을 지웠어요. 검증을 다시 해야 보고서 화면으로 넘어갈 수 있습니다.'); }
+      return;
+    }
+    if (t.classList.contains('aiapply')) {
+      var key = t.getAttribute('data-key'), to = t.getAttribute('data-to'), it = findItem(key);
+      if (!it) { t.parentNode.textContent = '이 의견을 찾을 수 없어요. 분석 결과가 바뀌었을 수 있어요.'; return; }
+      if (it.cat === to) { t.parentNode.textContent = '이미 "' + CAT_NAME[to] + '"입니다.'; return; }
+      if (to === it.auto.cat) delete catOverride[key]; else catOverride[key] = to;
+      var parent = t.parentNode;
+      refreshText('엑셀 ' + it.rowNum + '행 의견을 "' + CAT_NAME[it.cat] + '"에서 "' + CAT_NAME[to] + '"(으)로 바꿨어요. 위의 표와 그림에 반영했습니다.');
+      parent.innerHTML = '"' + esc(CAT_NAME[to]) + '"(으)로 바꿨어요 ✓';
+      return;
+    }
+    if (t.classList.contains('airem')) {
+      aiRemoveInserted(id); info.snap = null; aiUpdateCard(card);
+      markReportStale(); verInvalidate();
+      aiMsg('warn', '보고서에서 이 글을 뺐어요. 검증을 다시 해야 보고서 화면으로 넘어갈 수 있습니다.');
+      return;
+    }
+    if (t.classList.contains('aiins') && !t.disabled) {
+      var lines = aiReadBody(card.querySelector('.aibody')), plain = aiPlain(lines);
+      if (!lines.length) { aiMsg('error', '카드가 비어 있어요. 글을 쓰거나, 필요 없으면 "지우기"를 눌러 주세요.'); return; }
+      var bad = V_TERMS.filter(function (x) { return x[1].test(plain); }).map(function (x) { return x[0]; });
+      if (bad.length) { aiMsg('error', '보고서에는 쓸 수 없는 표현이 들어 있어요: "' + bad.join('", "') + '". 카드에서 지우거나 고친 뒤에 다시 넣어 주세요.'); return; }
+      var unres = 0; lines.forEach(function (l) { l.forEach(function (s) { if (s.t === 'ph' && aiPh(s.k, s.name) === null) unres++; }); });
+      if (unres) { aiMsg('error', '값을 채우지 못한 자리표시자(노란색)가 ' + unres + '개 있어요. 지우거나 문항 이름을 고친 뒤에 다시 넣어 주세요.'); return; }
+      aiRemoveInserted(id);
+      aiInserted.push({ id: id, kind: info.kind, lines: lines });
+      info.snap = JSON.stringify(lines);
+      aiUpdateCard(card);
+      markReportStale(); verInvalidate();
+      aiMsg('ok', '보고서에 넣었어요. 아래 "검증"을 다시 해야 보고서 화면으로 넘어갈 수 있습니다.');
+    }
+  });
+  $('aiCards').addEventListener('input', function (e) {
+    var card = e.target.closest ? e.target.closest('.aicard') : null;
+    if (card && e.target.classList.contains('aibody')) aiUpdateCard(card);
+  });
+  $('aiCards').addEventListener('focusout', function (e) {   // 고친 뒤 칸을 벗어나면 숫자 표시를 다시 계산
+    var body = e.target.classList && e.target.classList.contains('aibody') ? e.target : null;
+    if (!body) return;
+    body.innerHTML = aiLinesHtml(aiReadBody(body));
+    aiUpdateCard(body.closest('.aicard'));
+  });
+  $('aiModel').value = AI_DEFAULT_MODEL;
+
+  /* ---------- 7단계: 검증 (집계 코드와 다른 방법으로 원래 표를 다시 세어 화면과 맞춰 봄) ---------- */
+  var analysisCount = 0, analysisColsSig = '', verState = null;
+
+  function colsSig() { return JSON.stringify(cols.map(function (c) { return [c.idx, c.type, c.short]; })); }
+  function ovRaw() {
+    return ['ov_title', 'ov_org', 'ov_dept', 'ov_author', 'ov_period', 'ov_target', 'ov_method'].map(function (id) { return $(id).value.trim(); });
+  }
+  function stateSig() {
+    return JSON.stringify([analysisCount, colsSig(), $('excludeBad').checked, catOverride, kw, ovRaw(), rows.length, aiInserted]);
+  }
+
+  // 나눗셈: 집계 때와 달리 한 자리씩 직접 나누고, 다음 자리가 5 이상이면 올림 (사사오입)
+  function vDiv(num, den, d) {
+    var ip = Math.floor(num / den), rem = num - ip * den, ds = '', k, dg;
+    for (k = 0; k <= d; k++) { rem *= 10; dg = Math.floor(rem / den); rem -= dg * den; ds += dg; }
+    var big = BigInt(String(ip) + ds.slice(0, d)) + (ds.charAt(d) >= '5' ? 1n : 0n);
+    var s = big.toString();
+    if (d === 0) return s;
+    while (s.length < d + 1) s = '0' + s;
+    return s.slice(0, s.length - d) + '.' + s.slice(s.length - d);
+  }
+  // 점수 읽기: 빈칸 -1, 1~5점이 아니면 0, 맞으면 점수 (4 또는 4.0 만 인정)
+  function vScore(v) {
+    if (v === '') return -1;
+    var p = v.split('.');
+    if (p.length > 2 || p[0].length !== 1 || '12345'.indexOf(p[0]) < 0) return 0;
+    if (p.length === 2 && (p[1] === '' || p[1].split('0').join('') !== '')) return 0;
+    return Number(p[0]);
+  }
+  // 정렬한 뒤 같은 값끼리 묶어서 세기
+  function vRuns(arr) {
+    var s = arr.slice().sort(), out = [], k;
+    for (k = 0; k < s.length; k++) {
+      if (out.length && out[out.length - 1][0] === s[k]) out[out.length - 1][1]++; else out.push([s[k], 1]);
+    }
+    return out;
+  }
+  var V_STRIP = ' \t\r\n 　﻿-_.,!?~·…\'"“”‘’()[]{}/\\:;*';
+  function vMeaningless(m) {
+    var t = m.split(MASK).join(''), o = '', k;
+    for (k = 0; k < t.length; k++) { if (V_STRIP.indexOf(t.charAt(k)) < 0) o += t.charAt(k); }
+    o = o.toLowerCase();
+    return o === '' || MEANINGLESS.indexOf(o) >= 0;
+  }
+  function cellTexts(tr) { return Array.prototype.map.call(tr.cells, function (td) { return td.textContent.trim(); }); }
+
+  // 계산에 쓸 응답 다시 고르기
+  function vRows() {
+    var sIdx = snap.scale.map(function (c) { return c.idx; }), flagged = [], r, sc, pick = [];
+    if (sIdx.length >= 3) {
+      for (r = 0; r < rows.length; r++) {
+        sc = sIdx.map(function (ix) { return vScore(rows[r][ix]); });
+        if (sc.every(function (x) { return x > 0; }) && sc.every(function (x) { return x === sc[0]; })) flagged.push(r);
+      }
+    }
+    var drop = $('excludeBad').checked && flagged.length > 0;
+    for (r = 0; r < rows.length; r++) { if (!(drop && flagged.indexOf(r) >= 0)) pick.push(r); }
+    return { flagged: flagged, drop: drop, used: pick };
+  }
+
+  function vCompareChoice(card, T, isMulti) {
+    var diffs = [], meta = card ? (card.querySelector('.meta') || { textContent: '' }).textContent : '';
+    if (!card) return ['화면에서 이 문항의 표를 찾지 못함'];
+    var mn = /\(n\):\s*(\d+)명/.exec(meta);
+    if (!mn || Number(mn[1]) !== T.n) diffs.push('n: 화면 ' + (mn ? mn[1] : '없음') + ' / 다시 센 값 ' + T.n);
+    if (isMulti) {
+      var mt = /총 선택 수:\s*(\d+)개/.exec(meta);
+      if (!mt || Number(mt[1]) !== T.total) diffs.push('총 선택 수: 화면 ' + (mt ? mt[1] : '없음') + ' / 다시 센 값 ' + T.total);
+    }
+    if (T.n === 0) { if (card.querySelector('table')) diffs.push('답한 사람이 없는데 표가 있음'); return diffs; }
+    var disp = {}, order = [], prev = Infinity, inOrder = true;
+    Array.prototype.forEach.call(card.querySelectorAll('tbody tr:not(.sum)'), function (tr) {
+      var c = cellTexts(tr); disp[c[0]] = [c[1], c[2]]; order.push(Number(c[1]));
+    });
+    order.forEach(function (x) { if (x > prev) inOrder = false; prev = x; });
+    if (!inOrder) diffs.push('건수가 많은 순서로 놓여 있지 않음');
+    T.list.forEach(function (e) {
+      var d = disp[e[0]], ratio = vDiv(e[1] * 100, T.n, 1) + '%';
+      if (!d) { diffs.push('보기 "' + e[0] + '"이(가) 화면에 없음'); return; }
+      if (d[0] !== String(e[1])) diffs.push('"' + e[0] + '" 건수: 화면 ' + d[0] + ' / 다시 센 값 ' + e[1]);
+      if (d[1] !== ratio) diffs.push('"' + e[0] + '" 비율: 화면 ' + d[1] + ' / 다시 센 값 ' + ratio);
+    });
+    Object.keys(disp).forEach(function (k) {
+      if (!T.list.some(function (e) { return e[0] === k; })) diffs.push('화면에만 있는 보기: "' + k + '"');
+    });
+    var sr = card.querySelector('tr.sum');
+    if (!sr) diffs.push('합계 줄이 없음');
+    else {
+      var sc = cellTexts(sr), tot = isMulti ? T.total : T.n;
+      if (sc[1] !== String(tot)) diffs.push('합계: 화면 ' + sc[1] + ' / 다시 센 값 ' + tot);
+      if (sc[2] !== vDiv(tot * 100, T.n, 1) + '%') diffs.push('합계 비율: 화면 ' + sc[2] + ' / 다시 센 값 ' + vDiv(tot * 100, T.n, 1) + '%');
+    }
+    return diffs;
+  }
+
+  // 보고서 초안을 미리 만들어 숫자·표현·개인정보·[입력 필요]를 확인
+  function vReport(R, add) {
+    var box = document.createElement('div');
+    box.innerHTML = buildReport();
+    var els = Array.prototype.slice.call(box.querySelectorAll('h1,h2,p,td,th'));
+    var full = els.map(function (e) { return e.textContent; }).join('\n');
+
+    // (1) 숫자: 입력해서 생긴 글(제목, 개요 표, 문항 이름, 보기 이름)을 빼고 남은 숫자가 모두 다시 센 결과에 있어야 함
+    var A = {}, k;
+    function addN(x) { A[String(x)] = 1; }
+    [0, 1, 2, 3, 4, 5, 10, 20, 100].forEach(addN); A['100.0'] = 1;
+    for (k = 1; k <= 30; k++) addN(k);
+    addN(R.total); addN(R.used); addN(R.bad);
+    addN(R.nScale); addN(R.nChoice); addN(R.nText);
+    var ts = 0, tn = 0;
+    R.scale.forEach(function (e) {
+      addN(e.n); e.counts.forEach(addN); addN(e.inv);
+      if (e.n > 0) { addN(e.avg); addN(e.s100); addN(e.pos.replace('%', '')); }
+      ts += e.sum; tn += e.n;
+    });
+    addN(tn); if (tn > 0) { addN(vDiv(ts, tn, 2)); addN(vDiv(ts * 20, tn, 1)); }
+    var invAll = 0; R.scale.forEach(function (e) { invAll += e.inv; }); addN(invAll);
+    R.single.concat(R.multi).forEach(function (e) {
+      addN(e.n); addN(e.total); addN(e.list.length);
+      for (k = 0; k <= e.list.length; k++) addN(k);
+      e.list.forEach(function (x) { addN(x[1]); if (e.n > 0) addN(vDiv(x[1] * 100, e.n, 1)); });
+      if (e.n > 0) { addN(vDiv(e.total * 100, e.n, 1)); addN(vDiv(e.n * 100, e.n, 1)); }
+    });
+    var catSum = [0, 0, 0, 0, 0, 0], totalN = 0;
+    R.text.forEach(function (e) {
+      addN(e.N); addN(e.blank); addN(e.drop); addN(e.M);
+      if (e.M > 0) addN(vDiv(e.N * 100, e.M, 1));
+      e.cats.forEach(function (c, i) { addN(c); catSum[i] += c; if (e.N > 0) addN(vDiv(c * 100, e.N, 1)); });
+      totalN += e.N;
+    });
+    catSum.forEach(function (c) { addN(c); if (totalN > 0) addN(vDiv(c * 100, totalN, 1)); });
+    addN(totalN);
+
+    // 입력해서 생긴 글 빼기
+    var strip = box.cloneNode(true);
+    Array.prototype.forEach.call(strip.querySelectorAll('h1'), function (e) { e.parentNode.removeChild(e); });
+    var t1 = strip.querySelector('table'); if (t1) t1.parentNode.removeChild(t1);
+    Array.prototype.forEach.call(strip.querySelectorAll('td:first-child'), function (e) { e.parentNode.removeChild(e); });
+    var clean = Array.prototype.slice.call(strip.querySelectorAll('h2,p,td,th')).map(function (e) { return e.textContent; }).join('\n');
+    clean = clean.replace(/‘[^’]*’/g, ' ');
+    var names = [];
+    ['scale', 'single', 'multi', 'text'].forEach(function (g) { snap[g].forEach(function (c) { names.push(c.name); }); });
+    names.filter(function (s) { return s.length >= 2 && /[^\d\s.,%]/.test(s); })
+      .sort(function (a, b) { return b.length - a.length; })
+      .forEach(function (s) { clean = clean.split(s).join(' '); });
+    var odd = [], seen = {}, re = /\d+(?:\.\d+)?/g, m;
+    while ((m = re.exec(clean)) !== null) {
+      if (!A[m[0]] && !seen[m[0]]) {
+        seen[m[0]] = 1;
+        odd.push(m[0] + ' (…' + clean.slice(Math.max(0, m.index - 14), m.index + m[0].length + 6).replace(/\s+/g, ' ') + '…)');
+      }
+    }
+    var allNums = (clean.match(/\d+(?:\.\d+)?/g) || []).length;
+    if (odd.length) add(3, 'err', '보고서 숫자 대조', '다시 센 결과에 없는 숫자가 보고서에 있어요: ' + esc(odd.join(' / ')) + '. 이 숫자는 어디서 왔는지 확인이 필요합니다.');
+    else add(3, 'ok', '보고서 숫자 대조', '보고서에 나온 숫자 ' + allNums + '개(문항 이름·보기·조사 개요에 적은 글자는 뺌)가 모두 다시 센 결과에 있음');
+
+    // (2) 쓰면 안 되는 표현
+    var terms = V_TERMS;
+    var bad = [], warnT = [];
+    terms.forEach(function (t) {
+      var inC = t[1].test(clean), inF = t[1].test(full);
+      if (inC) bad.push(t[0]); else if (inF) warnT.push(t[0]);
+    });
+    if (bad.length) add(3, 'err', '쓰면 안 되는 표현', '보고서에 "' + esc(bad.join('", "')) + '" 표현이 들어 있어요. 보고서 문장에서 빼야 합니다.');
+    else if (warnT.length) add(3, 'warn', '쓰면 안 되는 표현', '"' + esc(warnT.join('", "')) + '" 표현이 조사 개요나 문항·보기 이름(입력한 글자)에 들어 있어요. 보고서에 그대로 써도 되는지 확인해 주세요.');
+    else add(3, 'ok', '쓰면 안 되는 표현', 'AI, 자동 분류, 전년, 목표 등이 보고서에 없음');
+
+    // (3) 전화번호·이메일 모양
+    var pii = [];
+    els.forEach(function (e) {
+      var mk = maskPII(e.textContent);
+      if (mk.n > 0) {
+        var pg = e.closest ? e.closest('.pg') : null, h2 = pg ? pg.querySelector('h2') : null;
+        pii.push((h2 ? h2.textContent + ' › ' : '') + cut(mk.t.replace(/\s+/g, ' '), 40));
+      }
+    });
+    if (pii.length) add(3, 'err', '전화번호·이메일 모양', '전화번호나 이메일처럼 보이는 글자가 ' + pii.length + '곳에 남아 있어요(아래는 가린 모습): ' + esc(pii.join(' / ')) + '. 1단계 조사 개요 칸이나 문항 이름에서 지워 주세요.');
+    else add(3, 'ok', '전화번호·이메일 모양', '보고서에 전화번호·이메일처럼 보이는 글자가 없음');
+
+    // (3-2) 글쓰기 도움으로 보고서에 넣은 문장
+    var aiN = aiLines('improve').length + aiLines('overall').length;
+    if (aiN > 0) {
+      var unres = box.querySelectorAll('mark[data-unres]').length + (full.match(/\{[^{}]*[:：][^{}]*\}/g) || []).length;
+      var direct = box.querySelectorAll('mark[data-aino]:not([data-unres])').length;
+      if (unres) add(3, 'err', '채우지 못한 자리표시자', '보고서에 값을 채우지 못한 자리표시자(예: {평균:문항이름})가 ' + unres + '곳 있어요. 글쓰기 도움 카드에서 지우거나 문항 이름을 고친 뒤 다시 넣어 주세요.');
+      else add(3, 'ok', '채우지 못한 자리표시자', '글쓰기 도움 문장의 자리표시자가 모두 앱이 계산한 값으로 채워짐');
+      if (direct) add(3, 'warn', '직접 쓴 숫자', '글쓰기 도움 문장에 직접 쓴 숫자가 ' + direct + '곳(노란색) 있어요. 계산 결과와 맞는지 확인해 주세요. (계산 결과에 없는 숫자는 위 "보고서 숫자 대조"에서 오류로 나옵니다.)');
+      add(3, 'warn', '글쓰기 도움 문장 ' + aiN + '줄', '보고서에 글쓰기 도움으로 만든 문장이 ' + aiN + '줄 들어 있어요(개선 방향 ' + aiLines('improve').length + '줄, 종합 평가 ' + aiLines('overall').length + '줄). 내용이 사실과 맞는지 직접 읽고 판단해 주세요.');
+    }
+
+    // (4) [입력 필요]
+    var marks = Array.prototype.slice.call(box.querySelectorAll('mark[data-need]')), raw = (full.match(/\[입력 필요\]/g) || []).length;
+    function where(mk) {
+      var pg = mk.closest('.pg'), h2 = pg ? pg.querySelector('h2') : null, sec = h2 ? h2.textContent : '';
+      if (mk.closest('h1')) return '보고서 제목(조사명)';
+      var td = mk.closest('td');
+      if (td) return sec + ' › ' + td.parentNode.cells[0].textContent.trim();
+      var p = mk.closest('p'), t = p ? p.textContent : '';
+      t = t.replace(/\[입력 필요\]/g, '').replace(/^[ㅇ\-\s]+/, '').replace(/[:\s]+$/, '');
+      return sec + ' › ' + t;
+    }
+    if (raw !== marks.length) add(3, 'err', '[입력 필요] 표시', '[입력 필요]라고 적혀 있는데 노란색 표시가 안 된 곳이 ' + (raw - marks.length) + '곳 있어요.');
+    else if (marks.length) add(3, 'warn', '[입력 필요] ' + marks.length + '곳', '보고서에서 직접 채워야 하는 곳: ' + esc(marks.map(where).join(' / ')));
+    else add(3, 'ok', '[입력 필요]', '보고서에 직접 채워야 하는 곳이 없음');
+  }
+
+  function runVerify() {
+    var items = [];
+    function add(g, s, t, d) { items.push({ g: g, s: s, t: t, d: d }); }
+    function diffRow(g, title, diffs, okText) {
+      if (diffs.length) add(g, 'err', title, '화면과 다시 센 값이 달라요: ' + esc(diffs.join(' / ')));
+      else add(g, 'ok', title, okText);
+    }
+    try {
+      var vr = vRows(), used = vr.used, M = used.length;
+      var R = { total: rows.length, used: M, bad: vr.flagged.length, nScale: snap.scale.length, nChoice: snap.single.length + snap.multi.length,
+        nText: snap.text.length, scale: [], single: [], multi: [], text: [] };
+
+      /* 1. 숫자 다시 세기 */
+      var sameUsed = M === lastCtx.idxs.length && used.every(function (r, i) { return r === lastCtx.idxs[i]; });
+      diffRow(1, '계산에 쓴 응답', sameUsed ? [] : ['계산에 쓴 응답: 화면 ' + lastCtx.idxs.length + '건 / 다시 고른 응답 ' + M + '건 (같은 응답이 아님)'],
+        '전체 ' + rows.length + '건 중 ' + M + '건을 계산에 씀 (화면과 같은 응답)');
+      var sameFlag = vr.flagged.map(function (r) { return rowNums[r]; }).join(',') === snap.flagged.map(function (x) { return x.row; }).join(',');
+      diffRow(1, '불성실 의심 응답 찾기', sameFlag ? [] : ['화면 ' + snap.flagged.length + '건 / 다시 찾은 ' + vr.flagged.length + '건 (같은 응답이 아님)'],
+        vr.flagged.length ? ('모두 같은 점수로 답한 응답 ' + vr.flagged.length + '건 (화면과 같음)') : '모두 같은 점수로 답한 응답이 없음 (화면과 같음)');
+      if (vr.flagged.length && !vr.drop) add(1, 'warn', '불성실 의심 응답 처리', '의심 응답 ' + vr.flagged.length + '건을 포함해서 계산하고 있어요. 포함해도 되는지 확인해 주세요. (엑셀 ' + esc(vr.flagged.map(function (r) { return rowNums[r] + '행'; }).slice(0, 10).join(', ')) + (vr.flagged.length > 10 ? ' 외' : '') + ')');
+      else if (vr.flagged.length) add(1, 'ok', '불성실 의심 응답 처리', '의심 응답 ' + vr.flagged.length + '건을 뺀 나머지로 계산함');
+
+      var scaleRows = $('scaleTable').querySelectorAll('tbody tr');
+      snap.scale.forEach(function (c, i) {
+        var vals = used.map(function (r) { return vScore(rows[r][c.idx]); }), good = vals.filter(function (x) { return x > 0; });
+        var cnt = [1, 2, 3, 4, 5].map(function (s) { return good.filter(function (x) { return x === s; }).length; });
+        var n = good.length, sum = good.reduce(function (a, b) { return a + b; }, 0), inv = vals.filter(function (x) { return x === 0; }).length;
+        var e = { name: c.name, n: n, counts: cnt, sum: sum, inv: inv,
+          avg: n ? vDiv(sum, n, 2) : '-', s100: n ? vDiv(sum * 20, n, 1) : '-', pos: n ? vDiv((cnt[3] + cnt[4]) * 100, n, 1) + '%' : '-' };
+        R.scale.push(e);
+        var tr = scaleRows[i], diffs = [];
+        if (!tr) diffs.push('화면에서 이 문항의 줄을 찾지 못함');
+        else {
+          var d = cellTexts(tr), exp = [c.name, String(n)].concat(cnt.map(String), [e.avg, e.s100, e.pos]),
+            lab = ['문항 이름', 'n', '1점', '2점', '3점', '4점', '5점', '평균', '100점 환산', '긍정 비율'];
+          exp.forEach(function (x, j) { if (d[j] !== x) diffs.push(lab[j] + ': 화면 ' + d[j] + ' / 다시 센 값 ' + x); });
+        }
+        diffRow(1, '5점 척도 · ' + c.name, diffs,
+          'n ' + n + ' · 1~5점 건수 ' + cnt.join('/') + ' · 평균 ' + e.avg + ' · 100점 환산 ' + e.s100 + ' · 긍정 비율 ' + e.pos + ' (화면과 같음)');
+        if (n === 0) add(1, 'warn', '5점 척도 · ' + c.name + ' 응답 없음', '이 문항에 1~5점으로 답한 응답이 없어요. 문항 종류가 맞는지 확인해 주세요.');
+        if (inv > 0) add(1, 'warn', '5점 척도 · ' + c.name + ' 뺀 값', '1~5점이 아니라서 계산에서 뺀 값이 ' + inv + '개 있어요. 원본 파일에서 맞는 값인지 확인해 주세요.');
+      });
+
+      var singleCards = $('singleCards').querySelectorAll('.qcard');
+      snap.single.forEach(function (c, i) {
+        var vals = used.map(function (r) { return rows[r][c.idx]; }).filter(function (v) { return v !== ''; }).map(function (v) { return maskPII(v).t; });
+        var T = { n: vals.length, list: vRuns(vals) }, e = { name: c.name, n: T.n, total: T.n, list: T.list };
+        R.single.push(e);
+        diffRow(1, '단일 선택 · ' + c.name, vCompareChoice(singleCards[i], T, false),
+          'n ' + T.n + ' · 보기 ' + T.list.length + '개의 건수·비율이 화면과 같고, 건수를 더하면 n과 같음');
+        if (T.n === 0) add(1, 'warn', '단일 선택 · ' + c.name + ' 응답 없음', '이 문항에 답한 사람이 없어요. 문항 종류가 맞는지 확인해 주세요.');
+      });
+      var multiCards = $('multiCards').querySelectorAll('.qcard');
+      snap.multi.forEach(function (c, i) {
+        var all = [], n = 0;
+        used.forEach(function (r) {
+          var v = rows[r][c.idx];
+          if (v === '') return;
+          var parts = maskPII(v).t.split('，').join(',').split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s !== ''; });
+          var uniq = parts.filter(function (s, j) { return parts.indexOf(s) === j; });
+          if (!uniq.length) return;
+          n++; uniq.forEach(function (s) { all.push(s); });
+        });
+        var T = { n: n, total: all.length, list: vRuns(all) }, e = { name: c.name, n: n, total: all.length, list: T.list };
+        R.multi.push(e);
+        diffRow(1, '복수 선택 · ' + c.name, vCompareChoice(multiCards[i], T, true),
+          'n ' + n + ' · 총 선택 수 ' + T.total + ' · 보기 ' + T.list.length + '개의 건수·비율이 화면과 같음');
+        if (n === 0) add(1, 'warn', '복수 선택 · ' + c.name + ' 응답 없음', '이 문항에 답한 사람이 없어요. 문항 종류가 맞는지 확인해 주세요.');
+      });
+
+      /* 2. 서술형 확인 */
+      var textCards = $('textCols').querySelectorAll('.tcard');
+      if (!snap.text.length) add(2, 'ok', '서술형 문항', '서술형 문항이 없어 확인할 것이 없음');
+      snap.text.forEach(function (c, i) {
+        var v = textView[i], card = textCards[i], blank = 0, drop = 0, N = 0, nm = '서술형 · ' + c.name;
+        used.forEach(function (r) {
+          var raw = rows[r][c.idx];
+          if (raw === '') blank++; else if (vMeaningless(maskPII(raw).t)) drop++; else N++;
+        });
+        var dropTotal = 0; v.dropped.forEach(function (x) { dropTotal += x; });
+        var cats = ALL_CAT_IDS.map(function (id) { return v.items.filter(function (it) { return it.cat === id; }).length; });
+        R.text.push({ name: c.name, N: N, blank: blank, drop: drop, M: M, cats: cats.slice(0, 5).concat([cats[5]]) });
+        var diffs = [];
+        if (v.items.length !== N) diffs.push('서술형 응답 수: 정리 결과 ' + v.items.length + ' / 다시 센 값 ' + N);
+        if (v.blank !== blank) diffs.push('빈 답: 정리 결과 ' + v.blank + ' / 다시 센 값 ' + blank);
+        if (dropTotal !== drop) diffs.push('의미 없는 답: 정리 결과 ' + dropTotal + ' / 다시 센 값 ' + drop);
+        var st = card ? /서술형 응답 (\d+)건 · 응답률 ([\d.]+)% \(전체 응답자 (\d+)명 중 (\d+)명\)/.exec((card.querySelector('.tstats') || { textContent: '' }).textContent) : null;
+        if (!st) diffs.push('화면의 서술형 응답 수·응답률을 읽지 못함');
+        else {
+          if (Number(st[1]) !== N) diffs.push('화면의 서술형 응답 수 ' + st[1] + ' / 다시 센 값 ' + N);
+          if (M > 0 && st[2] !== vDiv(N * 100, M, 1)) diffs.push('응답률: 화면 ' + st[2] + '% / 다시 센 값 ' + vDiv(N * 100, M, 1) + '%');
+          if (Number(st[3]) !== M) diffs.push('전체 응답자 수: 화면 ' + st[3] + ' / 다시 센 값 ' + M);
+        }
+        diffRow(2, nm + ' · 응답 수', diffs, '서술형 응답 ' + N + '건 · 빈 답 ' + blank + '건 · 의미 없는 답 ' + drop + '건 · 응답률 ' + (M ? vDiv(N * 100, M, 1) : '-') + '% (화면과 같음)');
+        if (N === 0) { add(2, 'warn', nm + ' 응답 없음', '의미 있는 서술형 답이 없어요. 문항 종류가 맞는지 확인해 주세요.'); return; }
+
+        var cd = [], dispC = {}, sumDisp = 0;
+        Array.prototype.forEach.call(card.querySelectorAll('tbody tr:not(.sum)'), function (tr) { var x = cellTexts(tr); dispC[x[0]] = x; sumDisp += Number(x[1]); });
+        ALL_CAT_IDS.forEach(function (id, j) {
+          var x = dispC[CAT_NAME[id]];
+          if (!x) { cd.push('"' + CAT_NAME[id] + '" 줄이 없음'); return; }
+          if (x[1] !== String(cats[j])) cd.push(CAT_NAME[id] + ' 건수: 화면 ' + x[1] + ' / 다시 센 값 ' + cats[j]);
+          if (x[2] !== vDiv(cats[j] * 100, N, 1) + '%') cd.push(CAT_NAME[id] + ' 비율: 화면 ' + x[2] + ' / 다시 센 값 ' + vDiv(cats[j] * 100, N, 1) + '%');
+        });
+        var catTot = cats.reduce(function (a, b) { return a + b; }, 0), sr = card.querySelector('tr.sum');
+        if (catTot !== N) cd.push('분야별 건수를 더하면 ' + catTot + '건 (서술형 응답 수 ' + N + '건과 다름)');
+        if (sumDisp !== N) cd.push('화면의 분야별 건수를 더하면 ' + sumDisp + '건 (서술형 응답 수 ' + N + '건과 다름)');
+        if (!sr || cellTexts(sr)[1] !== String(N)) cd.push('합계 줄: 화면 ' + (sr ? cellTexts(sr)[1] : '없음') + ' / 서술형 응답 수 ' + N);
+        var listN = card.querySelectorAll('.titem').length;
+        if (listN !== N) cd.push('분야별 의견 목록에 있는 의견 ' + listN + '건 / 서술형 응답 수 ' + N + '건');
+        diffRow(2, nm + ' · 분야 건수 합계', cd, '분야별 건수 ' + cats.join(' + ') + ' = ' + catTot + '건 = 서술형 응답 수 ' + N + '건 (표·의견 목록도 같음)');
+
+        var none = cats[5];
+        if (none > 0) add(2, 'warn', nm + ' · 미분류', '미분류 의견이 ' + none + '건(' + vDiv(none * 100, N, 1) + '%) 있어요. 의견 목록에서 분야를 정하거나, 미분류로 둘지 판단해 주세요.');
+        else add(2, 'ok', nm + ' · 미분류', '미분류 의견이 없음');
+        var changed = v.items.filter(function (it) { return it.over; });
+        if (changed.length) add(2, 'ok', nm + ' · 사람이 바꾼 분류', '사람이 분야를 바꾼 의견 ' + changed.length + '건 (엑셀 ' + esc(changed.map(function (it) { return it.rowNum + '행'; }).slice(0, 10).join(', ')) + (changed.length > 10 ? ' 외' : '') + ')');
+        else add(2, 'warn', nm + ' · 사람이 바꾼 분류', '사람이 바꾼 분류가 0건이에요. 모든 의견이 키워드로 나눈 결과 그대로입니다. 보고서에는 "의견 내용을 확인하여 구분한 결과"라고 쓰이니, 의견 목록을 직접 확인했는지 판단해 주세요.');
+      });
+
+      /* 3. 보고서 대조 */
+      vReport(R, add);
+    } catch (err) {
+      add(0, 'err', '검증 중 오류', '검증하는 중에 문제가 생겼어요(' + esc(err && err.message ? err.message : String(err)) + '). 페이지를 새로고침(F5)하고 처음부터 다시 해 주세요.');
+    }
+    return items;
+  }
+
+  var V_GROUP = { 0: '검증 실행', 1: '1. 숫자 다시 세기', 2: '2. 서술형 확인', 3: '3. 보고서 대조' };
+  var V_ICON = { ok: '✓ 통과', warn: '⚠ 확인 필요', err: '✗ 오류' };
+  function verRender(items) {
+    var errs = items.filter(function (x) { return x.s === 'err'; }).length, warns = items.filter(function (x) { return x.s === 'warn'; }).length, oks = items.length - errs - warns;
+    var h = '<thead><tr><th>확인한 것</th><th>결과</th><th>설명</th></tr></thead><tbody>', g = -1;
+    items.slice().sort(function (a, b) { return a.g - b.g; }).forEach(function (x) {
+      if (x.g !== g) { g = x.g; h += '<tr class="vgrp"><td colspan="3">' + esc(V_GROUP[g]) + '</td></tr>'; }
+      h += '<tr><td class="q">' + esc(x.t) + '</td><td class="vst v' + x.s + '">' + V_ICON[x.s] + '</td><td>' + x.d + '</td></tr>';
+    });
+    $('verTable').innerHTML = h + '</tbody>';
+    var sm = $('verSummary');
+    sm.className = 'msg ' + (errs ? 'error' : warns ? 'warn' : 'ok');
+    sm.textContent = '✓ 통과 ' + oks + '개 · ⚠ 확인 필요 ' + warns + '개 · ✗ 오류 ' + errs + '개';
+    $('verResult').hidden = false;
+    $('verAck').checked = false;
+    $('verAckLine').hidden = !(warns > 0 && errs === 0);
+    verState = { sig: stateSig(), errs: errs, warns: warns };
+    verGate();
+  }
+  function verMsg(kind, text) { var m = $('verMsg'); m.className = text ? 'msg ' + kind : 'msg'; m.textContent = text; }
+  function verGate() {
+    var go = $('verGo'), gm = $('verGoMsg');
+    if (!verState) { go.disabled = true; return; }
+    var ok = verState.errs === 0 && (verState.warns === 0 || $('verAck').checked);
+    go.disabled = !ok;
+    if (verState.errs > 0) { gm.className = 'msg error'; gm.textContent = '✗ 오류가 있어서 보고서 화면으로 넘어갈 수 없어요. 위 설명을 보고 원인을 고친 뒤 "검증 시작"을 다시 눌러 주세요.'; }
+    else if (verState.warns > 0 && !$('verAck').checked) { gm.className = 'msg warn'; gm.textContent = '⚠ 확인 필요 항목을 모두 읽고 판단한 뒤, 위의 "모두 보고 판단했습니다"에 체크하면 넘어갈 수 있어요.'; }
+    else { gm.className = 'msg ok'; gm.textContent = verState.warns > 0 ? '확인 필요 항목을 모두 보고 판단하셨어요. 보고서 화면으로 넘어갈 수 있습니다.' : '모두 통과했어요. 보고서 화면으로 넘어갈 수 있습니다.'; }
+  }
+  // 앞 단계에서 무언가 바뀌면 검증 결과를 버리고, 보고서 화면을 닫는다
+  function verInvalidate() {
+    var had = verState !== null;
+    verState = null;
+    $('verResult').hidden = true;
+    $('verAck').checked = false;
+    $('s6').hidden = true;
+    if (had) verMsg('warn', '앞 단계에서 바뀐 내용이 있어요(문항 종류, 분류, 불성실 응답 제외, 조사 개요 등). 검증을 다시 해야 보고서 화면으로 넘어갈 수 있습니다.');
+    else verMsg('', '');
+  }
+
+  $('verBtn').addEventListener('click', function () {
+    if (!snap || !lastCtx) { verMsg('error', '분석 결과가 아직 없어요. 위에서 "분석 시작"을 먼저 눌러 주세요.'); return; }
+    if (colsSig() !== analysisColsSig) {
+      verMsg('error', '문항 종류나 이름을 바꾼 뒤 아직 "분석 시작"을 다시 누르지 않았어요. 위로 올라가 "분석 시작"을 다시 누른 뒤 검증해 주세요.');
+      return;
+    }
+    $('s6').hidden = true;
+    verMsg('', '');
+    verRender(runVerify());
+  });
+  $('verAck').addEventListener('change', verGate);
+  $('verGo').addEventListener('click', function () {
+    if (!verState || verState.sig !== stateSig() || verState.errs > 0 || (verState.warns > 0 && !$('verAck').checked)) { verInvalidate(); return; }
+    $('s6').hidden = false;
+    $('s6').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  $('ovBox').addEventListener('input', verInvalidate);
+
+  /* ---------- 분석 시작 ---------- */
+  function runAnalysis() {
+    var note = $('startNote');
+    var scale = cols.filter(function (c) { return c.type === 'scale'; }).map(colSnap);
+    var single = cols.filter(function (c) { return c.type === 'single'; }).map(colSnap);
+    var multi = cols.filter(function (c) { return c.type === 'multi'; }).map(colSnap);
+    var text = cols.filter(function (c) { return c.type === 'text'; }).map(colSnap);
+    if (!scale.length && !single.length && !multi.length && !text.length) {
+      $('s5').hidden = true;
+      $('s5v').hidden = true;
+      $('s5a').hidden = true;
+      $('s6').hidden = true;
+      analyzed = false;
+      snap = null;
+      note.className = 'msg warn';
+      note.textContent = '분석할 문항이 없어요. 위 표에서 문항 종류를 "5점 척도", "단일 선택", "복수 선택", "서술형" 중 하나로 정해 주세요.';
+      return;
+    }
+    note.className = 'msg';
+    note.textContent = '';
+
+    snap = { scale: scale, single: single, multi: multi, text: text, flagged: findStraight(scale) };
+    renderSincere();
+    $('staleMsg').className = 'msg';
+    $('staleMsg').textContent = '';
+    $('s5').hidden = false;
+    $('s5v').hidden = false;
+    $('s5a').hidden = false;
+    analysisCount++;
+    analysisColsSig = colsSig();
+    analyzed = true;
+    renderResults();
+    $('s5').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // 불성실 응답 찾기 결과와 체크 칸 상태
+  function renderSincere() {
+    var box = $('sincereBox'), chk = $('excludeBad'), label = $('excludeLabel');
+    var f = snap.flagged, html;
+    if (snap.scale.length < 3) {
+      box.className = 'msg';
+      box.textContent = '5점 척도 문항이 3개 이상일 때만 찾을 수 있어요. 지금은 ' + snap.scale.length + '개라서 찾지 않았습니다.';
+    } else if (!f.length) {
+      box.className = 'msg ok';
+      box.textContent = '5점 척도 ' + snap.scale.length + '개 문항에 모두 같은 점수로 답한 응답은 없었어요.';
+    } else {
+      var byScore = {};
+      f.forEach(function (x) { (byScore[x.score] = byScore[x.score] || []).push(x.row); });
+      html = '<b>5점 척도 ' + snap.scale.length + '개 문항에 모두 같은 점수로 답한 응답이 ' + f.length + '건 있어요.</b>' +
+        ' (번호는 엑셀 행 번호이고, 제목 행이 1행입니다)<ul>';
+      Object.keys(byScore).sort().forEach(function (s) {
+        var list = byScore[s].slice().sort(function (a, b) { return a - b; });
+        html += '<li><b>모두 ' + s + '점</b> (' + list.length + '건): ' + list.map(function (r) { return r + '행'; }).join(', ') + '</li>';
+      });
+      html += '</ul><span style="display:block;margin-top:6px">같은 점수로 답했다고 해서 꼭 불성실한 것은 아닙니다. 원본 파일에서 해당 행을 확인하고 판단해 주세요. 빈칸이나 1~5점이 아닌 값이 있는 응답은 이 검사에서 빼고 보았습니다.</span>';
+      box.className = 'msg warn excl';
+      box.innerHTML = html;
+    }
+    if (!f.length) { chk.checked = false; chk.disabled = true; label.classList.add('disabled'); }
+    else { chk.disabled = false; label.classList.remove('disabled'); }
+  }
+
+  // 모든 표 계산·그리기 (체크 칸 상태에 따라 불성실 응답을 빼고 다시 계산)
+  function renderResults() {
+    if (!snap) return;
+    var bad = {};
+    snap.flagged.forEach(function (x) { bad[x.i] = true; });
+    var useBad = $('excludeBad').checked && snap.flagged.length > 0;
+    var idxs = [], i;
+    for (i = 0; i < rows.length; i++) { if (!(useBad && bad[i])) idxs.push(i); }
+
+    var scaleStats = [];
+    $('usedInfo').textContent = useBad
+      ? '계산에 쓴 응답: ' + idxs.length + '건 (전체 ' + rows.length + '건 중 불성실 의심 응답 ' + snap.flagged.length + '건을 뺐어요)'
+      : '계산에 쓴 응답: ' + idxs.length + '건 (전체 ' + rows.length + '건을 모두 포함)';
+
+    /* 5점 척도 */
+    $('scaleBlock').hidden = !snap.scale.length;
+    if (snap.scale.length) {
+      var html = '<thead><tr><th>문항</th><th class="rn">n</th><th class="rn">1점</th><th class="rn">2점</th>' +
+        '<th class="rn">3점</th><th class="rn">4점</th><th class="rn">5점</th><th class="rn">평균</th>' +
+        '<th class="rn">100점 환산</th><th class="rn">긍정 비율</th><th class="chk">검산</th></tr></thead><tbody>';
+      var exclLines = [];
+      snap.scale.forEach(function (c) {
+        var t = tallyScale(c, idxs);
+        scaleStats.push({ name: c.name, title: c.title, n: t.n, sum: t.sum, counts: t.counts, invalidTotal: t.invalidTotal });
+        var countSum = t.counts.reduce(function (a, b) { return a + b; }, 0);
+        var ok = countSum === t.n;
+        var avg = '-', score100 = '-', pos = '-';
+        if (t.n > 0) {
+          avg = fmtFrac(t.sum, t.n, 2);                                  // 평균 = 합계 ÷ n
+          score100 = fmtFrac(t.sum * 20, t.n, 1);                        // 100점 = 평균 × 20
+          pos = pct(t.counts[3] + t.counts[4], t.n);                     // 긍정 = (4점+5점) ÷ n
+        }
+        html += '<tr><td class="q">' + esc(c.name) + '</td><td class="rn">' + t.n + '</td>' +
+          t.counts.map(function (x) { return '<td class="rn">' + x + '</td>'; }).join('') +
+          '<td class="rn">' + avg + '</td><td class="rn">' + score100 + '</td><td class="rn">' + pos + '</td>' +
+          '<td class="chk ' + (ok ? 'ok' : 'bad') + '">' + (ok ? '✓' : '✗') + '</td></tr>';
+        if (t.invalidTotal > 0) {
+          var keys = Object.keys(t.invalid).sort(function (a, b) { return t.invalid[b] - t.invalid[a]; });
+          var parts = keys.slice(0, 5).map(function (k) { return '"' + esc(cut(k, 40)) + '" ' + t.invalid[k] + '개'; });
+          if (keys.length > 5) parts.push('그 밖의 ' + (keys.length - 5) + '종류');
+          exclLines.push('<li><b>' + esc(c.name) + '</b>: 1~5점이 아니라서 뺀 값 ' + t.invalidTotal + '개 (' + parts.join(', ') + ')</li>');
+        }
+      });
+      html += '</tbody>';
+      $('scaleTable').innerHTML = html;
+      var ex = $('exclInfo');
+      if (exclLines.length) {
+        ex.className = 'msg warn excl';
+        ex.innerHTML = '<b>계산에서 뺀 값이 있어요.</b> 아래 값은 1~5점이 아니어서 n, 건수, 평균에 넣지 않았습니다. 원본 파일에서 맞는 값인지 확인해 주세요.<ul>' + exclLines.join('') + '</ul>';
+      } else {
+        ex.className = 'msg ok excl';
+        ex.textContent = '모든 5점 척도 문항에서 1~5점이 아닌 값은 없었어요.';
+      }
+    }
+
+    /* 단일 선택 */
+    $('singleBlock').hidden = !snap.single.length;
+    if (snap.single.length) {
+      $('singleCards').innerHTML = snap.single.map(function (c) {
+        var t = tallySingle(c, idxs);
+        var h = '<div class="qcard"><h4>' + esc(c.name) + '</h4><p class="meta">답한 사람 수(n): ' + t.n + '명</p>';
+        if (!t.n) return h + '<p class="meta">답한 사람이 없어요.</p></div>';
+        var sum = 0;
+        h += '<div class="scroll"><table><thead><tr><th>보기</th><th class="rn">건수</th><th class="rn">비율</th></tr></thead><tbody>';
+        t.list.forEach(function (e) {
+          sum += e[1];
+          h += '<tr><td class="opt">' + esc(e[0]) + '</td><td class="rn">' + e[1] + '</td><td class="rn">' + pct(e[1], t.n) + '</td></tr>';
+        });
+        h += '<tr class="sum"><td>합계</td><td class="rn">' + sum + '</td><td class="rn">' + pct(sum, t.n) + '</td></tr></tbody></table></div></div>';
+        return h;
+      }).join('');
+    }
+
+    /* 복수 선택 */
+    $('multiBlock').hidden = !snap.multi.length;
+    if (snap.multi.length) {
+      $('multiCards').innerHTML = snap.multi.map(function (c) {
+        var t = tallyMulti(c, idxs);
+        var h = '<div class="qcard"><h4>' + esc(c.name) + '</h4><p class="meta">답한 사람 수(n): ' + t.n + '명 · 총 선택 수: ' + t.total + '개</p>';
+        if (!t.n) return h + '<p class="meta">답한 사람이 없어요.</p></div>';
+        h += '<div class="scroll"><table><thead><tr><th>보기</th><th class="rn">건수</th><th class="rn">비율</th></tr></thead><tbody>';
+        t.list.forEach(function (e) {
+          h += '<tr><td class="opt">' + esc(e[0]) + '</td><td class="rn">' + e[1] + '</td><td class="rn">' + pct(e[1], t.n) + '</td></tr>';
+        });
+        h += '<tr class="sum"><td>합계 (총 선택 수)</td><td class="rn">' + t.total + '</td><td class="rn">' + pct(t.total, t.n) + '</td></tr></tbody></table></div></div>';
+        return h;
+      }).join('');
+    }
+
+    /* 계산 방식 */
+    var cn = '<p><b>계산 방식</b></p>' +
+      '<p>n은 그 문항에 답한 사람 수입니다. 빈칸은 0점이나 "답 없음"으로 세지 않고 계산에서 뺍니다.</p>';
+    if (snap.scale.length) {
+      cn += '<p><b>5점 척도</b>: 1~5점이 아닌 값은 계산에서 뺍니다. 평균은 점수 합계를 n으로 나눈 값, 100점 환산은 평균에 20을 곱한 값, 긍정 비율은 4점과 5점으로 답한 사람 수를 n으로 나눈 값입니다. 검산 칸은 1점~5점 건수를 모두 더한 값이 n과 같으면 ✓, 다르면 ✗ 입니다.</p>';
+    }
+    if (snap.single.length) {
+      cn += '<p><b>단일 선택</b>: 보기마다 건수를 세고, 비율은 건수를 n으로 나눈 값입니다. 건수가 많은 보기부터 보여 줍니다.</p>';
+    }
+    if (snap.multi.length) {
+      cn += '<p><b>복수 선택</b>: 한 칸에 쉼표로 적힌 답을 나눠 보기마다 건수를 세고, 비율은 건수를 n(답한 사람 수)으로 나눈 값입니다. 한 사람이 여러 개를 고를 수 있어서 비율을 모두 더하면 100%를 넘을 수 있습니다. 한 사람이 같은 보기를 두 번 적어도 한 번으로 셉니다. 보기 글자 안에 쉼표가 들어 있으면 둘로 나뉘니 확인해 주세요.</p>';
+    }
+    cn += '<p><b>불성실 의심 응답</b>: 5점 척도 문항이 3개 이상일 때, 모든 5점 척도 문항에 1~5점으로 답했고 점수가 전부 같은 응답을 찾습니다. "불성실 응답 제외하고 계산"에 체크하면 이 응답을 뺀 나머지로 위의 모든 표를 다시 계산합니다.</p>';
+    if (snap.text.length) {
+      cn += '<p><b>서술형 의견</b>: 빈 답과 "없음", "-" 같은 의미 없는 답은 빼고 세며, 응답률은 서술형 응답 수를 전체 응답자 수로 나눈 값입니다. 전화번호와 이메일 모양은 [가림]으로 바꿔 보여 줍니다. 분야는 키워드로 자동 분류한 것이라 틀릴 수 있으니, 보고서에 쓰기 전에 의견 목록에서 확인하고 고쳐 주세요.</p>';
+    }
+    cn += '<p>계산하는 도중에는 반올림하지 않고, 화면에 보여 줄 때만 사사오입(엑셀의 ROUND와 같은 방식)으로 반올림합니다. 평균은 소수 둘째 자리, 100점 환산과 비율은 소수 첫째 자리까지 보여 줍니다.</p>';
+    $('calcNote').innerHTML = cn;
+
+    var basis = { used: idxs.length, total: rows.length, bad: snap.flagged.length, useBad: useBad };
+    renderSummary(basis, scaleStats);
+    lastCtx = { idxs: idxs, basis: basis, stats: scaleStats };
+    buildText(idxs);
+    renderGraphs(idxs, basis, scaleStats);
+    markReportStale();
+    aiDropClsCards();
+    aiRefreshValues();
+    verInvalidate();
+  }
+
+  $('startBtn').addEventListener('click', runAnalysis);
+  $('excludeBad').addEventListener('change', renderResults);
+
+  /* ---------- 엑셀 읽기 도구 확인 ---------- */
+  window.addEventListener('load', function () {
+    if (typeof XLSX === 'undefined') {
+      showMsg('warn', '엑셀(xlsx)을 읽는 도구를 불러오지 못했어요. 인터넷 연결을 확인하고 F5 키로 새로고침해 주세요. CSV 파일은 지금도 올릴 수 있습니다.');
+    }
+  });
+})();
+</script>
+</body>
+</html>
